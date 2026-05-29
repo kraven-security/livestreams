@@ -1,0 +1,50 @@
+{
+    "WorkflowBlueprint": {
+        "id": "102",
+        "uuid": "de73758d-23e8-4566-964f-36942edd3b86",
+        "name": "Kraven - Notify on publish (webhook / Slack)",
+        "description": "[event-publish]\r\nPOSTs the published Event to a webhook URL (e.g. a Slack incoming webhook or the bundled tools/misp-workflows/webhook-listener.py). Used non-blocking: it notifies and lets the publish continue. NOTE: set Security.rest_client_enable_arbitrary_urls=true and replace the placeholder URL. Verify the `url` / `data_extraction_path` field labels in your MISP version's node editor after import.",
+        "timestamp": "1780066462",
+        "data": [
+            {
+                "id": 20,
+                "name": "Webhook",
+                "data": {
+                    "indexed_params": {
+                        "url": "https://hooks.slack.com/services/REPLACE/WITH/YOUR-WEBHOOK",
+                        "data_extraction_path": "Event"
+                    },
+                    "saved_filters": {
+                        "selector": "",
+                        "value": "",
+                        "operator": "",
+                        "path": ""
+                    },
+                    "node_uid": "s9e34x63hh8squdsyt412vw",
+                    "module_type": "action",
+                    "id": "webhook",
+                    "name": "Webhook",
+                    "multiple_output_connection": false,
+                    "previous_module_version": "0.1",
+                    "module_version": "0.2"
+                },
+                "class": "block-type-default",
+                "typenode": false,
+                "inputs": {
+                    "input_1": {
+                        "connections": []
+                    }
+                },
+                "outputs": {
+                    "output_1": {
+                        "connections": []
+                    }
+                },
+                "pos_x": 0,
+                "pos_y": 300
+            }
+        ],
+        "default": false,
+        "mermaid": "flowchart LR\n 20[\"fas:fa-paper-plane Webhook\"]\n"
+    }
+}

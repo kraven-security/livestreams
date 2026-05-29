@@ -1,0 +1,104 @@
+{
+    "WorkflowBlueprint": {
+        "id": "104",
+        "uuid": "9f91c05d-ceae-4f19-8b8d-1302c6d42fbb",
+        "name": "Kraven - Push flagged events to automation hub",
+        "description": "[event-publish]\r\nAPI-driven automation. Only events tagged `workflow:send-to-soar` are POSTed (full Event payload) to an external orchestrator (n8n / SOAR / a PyMISP listener that can call back into the MISP REST API). Tag-gating keeps the firehose off and gives analysts explicit control over what gets pushed. NOTE: replace the URL and verify webhook field labels in your MISP version.",
+        "timestamp": "1780066462",
+        "data": [
+            {
+                "id": 40,
+                "name": "IF :: Tag",
+                "data": {
+                    "indexed_params": {
+                        "scope": "event",
+                        "condition": "in_or",
+                        "tags": [
+                            "workflow:send-to-soar"
+                        ],
+                        "clusters": ""
+                    },
+                    "saved_filters": {
+                        "selector": "",
+                        "value": "",
+                        "operator": "",
+                        "path": ""
+                    },
+                    "node_uid": "9nw1x7ltkx7n5hsj8am7nfn",
+                    "module_type": "logic",
+                    "id": "tag-if",
+                    "name": "IF :: Tag",
+                    "multiple_output_connection": false,
+                    "previous_module_version": "0.1",
+                    "module_version": "0.1"
+                },
+                "class": "block-type-if block-type-logic",
+                "typenode": false,
+                "inputs": {
+                    "input_1": {
+                        "connections": []
+                    }
+                },
+                "outputs": {
+                    "output_1": {
+                        "connections": [
+                            {
+                                "node": "41",
+                                "output": "input_1"
+                            }
+                        ]
+                    },
+                    "output_2": {
+                        "connections": []
+                    }
+                },
+                "pos_x": -150,
+                "pos_y": 300
+            },
+            {
+                "id": 41,
+                "name": "Webhook",
+                "data": {
+                    "indexed_params": {
+                        "url": "https://your-orchestrator.example/misp-hook",
+                        "data_extraction_path": "Event"
+                    },
+                    "saved_filters": {
+                        "selector": "",
+                        "value": "",
+                        "operator": "",
+                        "path": ""
+                    },
+                    "node_uid": "ybcxvi6s5f715b4775mnka9",
+                    "module_type": "action",
+                    "id": "webhook",
+                    "name": "Webhook",
+                    "multiple_output_connection": false,
+                    "previous_module_version": "0.1",
+                    "module_version": "0.2"
+                },
+                "class": "block-type-default",
+                "typenode": false,
+                "inputs": {
+                    "input_1": {
+                        "connections": [
+                            {
+                                "node": "40",
+                                "input": "output_1"
+                            }
+                        ]
+                    }
+                },
+                "outputs": {
+                    "output_1": {
+                        "connections": []
+                    }
+                },
+                "pos_x": 350,
+                "pos_y": 240
+            }
+        ],
+        "default": false,
+        "mermaid": "flowchart LR\n 40[/\"fas:fa-code-branch IF :: Tag\"/] -->|send-to-soar| 41[\"fas:fa-paper-plane Webhook\"]\n"
+    }
+}
