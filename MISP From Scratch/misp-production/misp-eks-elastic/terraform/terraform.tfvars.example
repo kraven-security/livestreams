@@ -1,0 +1,17 @@
+# terraform.tfvars.example
+# Copy to terraform.tfvars and fill in. Do NOT commit terraform.tfvars.
+
+region          = "eu-west-2"
+cluster_name    = "misp-prod"
+cluster_version = "1.32"
+
+# DNS + TLS — issue the ACM cert and validate it OFF-AIR (validation is slow).
+misp_hostname       = "misp.lab.kravensecurity.com"
+acm_certificate_arn = "arn:aws:acm:eu-west-2:111122223333:certificate/REPLACE-ME"
+
+# Sizing (lab defaults; bump for production)
+node_instance_types = ["m5.large"]
+node_desired        = 2
+db_instance_class   = "db.t3.medium"
+db_multi_az         = false
+redis_node_type     = "cache.t3.medium"

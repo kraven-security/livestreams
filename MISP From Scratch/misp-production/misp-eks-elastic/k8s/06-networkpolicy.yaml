@@ -1,0 +1,119 @@
+# 06-networkpolicy.yaml
+# Default-deny + explicit allow-list. APPLY THIS LAST, after the stack is healthy —
+# a misconfigured NetworkPolicy on air looks identical to a broken deployment.
+# Tune CIDRs to your VPC. Requires a CNI that enforces NetworkPolicy (the VPC CNI
+# needs network policy enforcement enabled, or use Calico).
+
+# 1) Default deny all ingress + egress in the namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: ${NAMESPACE}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# 2) Allow DNS egress to kube-dns
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: ${NAMESPACE}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# 3) ALB -> nginx on 80 (ALB targets pod IPs from within the VPC)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alb-to-nginx
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: misp-nginx
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: ${VPC_CIDR}
+      ports:
+        - protocol: TCP
+          port: 80
+---
+# 4) nginx -> misp (php-fpm) on 9002
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nginx-to-fpm
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: misp
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: misp-nginx
+      ports:
+        - protocol: TCP
+          port: 9002
+---
+# 5) misp -> RDS(3306) / Redis(6379) in-VPC, plus HTTPS egress for feeds/updates/S3
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-misp-egress
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: misp
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: ${VPC_CIDR}
+      ports:
+        - protocol: TCP
+          port: 3306
+        - protocol: TCP
+          port: 6379
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443     # feeds, updates, S3
+---
+# 6) nginx needs egress to fpm too (it initiates FastCGI)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-nginx-egress-fpm
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: misp-nginx
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: misp
+      ports:
+        - protocol: TCP
+          port: 9002

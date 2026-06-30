@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .t   { fill:#E6EDF3; }
+      .mut { fill:#8A97A4; }
+      .mono{ font-family:'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace; }
+      .card{ fill:#161B22; }
+      .inner{ fill:#1B2230; }
+    </style>
+    <marker id="ah-cyan" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#38BDF8"/></marker>
+    <marker id="ah-teal" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#2DD4BF"/></marker>
+    <marker id="ah-sand" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#E3B341"/></marker>
+    <marker id="ah-violet" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#A78BFA"/></marker>
+    <marker id="ah-amber" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#F5A524"/></marker>
+  </defs>
+
+  <!-- background -->
+  <rect x="0" y="0" width="1600" height="900" fill="#0E1116"/>
+
+  <!-- header -->
+  <text x="48" y="50" class="mono" fill="#38BDF8" font-size="13" letter-spacing="3">LIVE BUILD · DEPLOYED ON STREAM</text>
+  <text x="48" y="86" class="t" font-size="30" font-weight="700">MISP on AWS EKS → Elastic SIEM</text>
+  <text x="48" y="112" class="mut" font-size="14.5">Production deployment &amp; threat-intelligence pipeline</text>
+
+  <!-- ============ VPC ============ -->
+  <rect x="300" y="130" width="980" height="690" rx="16" fill="none" stroke="#2A3340" stroke-width="1.5"/>
+  <text x="320" y="156" class="mut mono" font-size="12.5">AWS VPC · 10.42.0.0/16 · eu-west-2</text>
+
+  <!-- ============ EKS ============ -->
+  <rect x="330" y="185" width="615" height="470" rx="14" fill="#0F141B" stroke="#2A3340" stroke-width="1.3"/>
+  <text x="350" y="210" class="mut mono" font-size="12.5">Amazon EKS — private subnets</text>
+
+  <!-- Internet -->
+  <rect x="56" y="235" width="190" height="64" rx="12" class="card" stroke="#38BDF8" stroke-opacity="0.55" stroke-width="1.4"/>
+  <circle cx="72" cy="251" r="4" fill="#38BDF8"/>
+  <text x="84" y="256" class="t" font-size="15" font-weight="600">Internet</text>
+  <text x="76" y="284" class="mut" font-size="12.5">Analysts · API clients</text>
+
+  <!-- ALB -->
+  <rect x="56" y="345" width="190" height="80" rx="12" class="card" stroke="#38BDF8" stroke-opacity="0.55" stroke-width="1.4"/>
+  <circle cx="72" cy="364" r="4" fill="#38BDF8"/>
+  <text x="84" y="369" class="t" font-size="15" font-weight="600">Application LB</text>
+  <text x="76" y="392" class="mut" font-size="12">AWS LB Controller</text>
+  <text x="76" y="410" class="mut" font-size="12">TLS termination · ACM</text>
+
+  <!-- nginx -->
+  <rect x="360" y="240" width="250" height="92" rx="12" class="card" stroke="#2DD4BF" stroke-opacity="0.55" stroke-width="1.4"/>
+  <circle cx="376" cy="259" r="4" fill="#2DD4BF"/>
+  <text x="388" y="264" class="t" font-size="15" font-weight="600">nginx  ×2</text>
+  <text x="380" y="288" class="mut" font-size="12">misp-core image · entrypoint_nginx</text>
+  <text x="380" y="308" class="mut mono" font-size="12">serves app on :80 (DISABLE_SSL_REDIRECT)</text>
+
+  <!-- misp pod -->
+  <rect x="360" y="360" width="250" height="272" rx="12" class="card" stroke="#2DD4BF" stroke-opacity="0.55" stroke-width="1.4"/>
+  <circle cx="376" cy="380" r="4" fill="#2DD4BF"/>
+  <text x="388" y="385" class="t" font-size="15" font-weight="600">misp pod</text>
+  <!-- php-fpm -->
+  <rect x="382" y="404" width="206" height="92" rx="9" class="inner" stroke="#2A3340" stroke-width="1"/>
+  <text x="398" y="430" class="t" font-size="13.5" font-weight="600">misp-core</text>
+  <text x="398" y="450" class="mut" font-size="12">PHP-FPM application</text>
+  <text x="398" y="482" class="mono" fill="#2DD4BF" font-size="12.5">:9002</text>
+  <!-- modules -->
+  <rect x="382" y="516" width="206" height="92" rx="9" class="inner" stroke="#2A3340" stroke-width="1"/>
+  <text x="398" y="542" class="t" font-size="13.5" font-weight="600">misp-modules</text>
+  <text x="398" y="562" class="mut" font-size="12">enrichment sidecar</text>
+  <text x="398" y="594" class="mono" fill="#2DD4BF" font-size="12.5">localhost :6666</text>
+
+  <!-- collector -->
+  <rect x="655" y="240" width="255" height="120" rx="12" class="card" stroke="#F5A524" stroke-opacity="0.6" stroke-width="1.4"/>
+  <circle cx="671" cy="259" r="4" fill="#F5A524"/>
+  <text x="683" y="264" class="t" font-size="15" font-weight="600">Collector (in-cluster)</text>
+  <text x="675" y="290" class="mut" font-size="12.5">Filebeat  ·  Elastic Agent (ti_misp)</text>
+  <text x="675" y="312" class="mut" font-size="12">pulls MISP internally,</text>
+  <text x="675" y="330" class="mut" font-size="12">ships out to external Elastic</text>
+
+  <!-- ============ AWS managed data services (in VPC, outside EKS) ============ -->
+  <!-- RDS -->
+  <rect x="975" y="200" width="275" height="92" rx="12" class="card" stroke="#E3B341" stroke-opacity="0.55" stroke-width="1.4"/>
+  <circle cx="991" cy="219" r="4" fill="#E3B341"/>
+  <text x="1003" y="224" class="t" font-size="15" font-weight="600">Amazon RDS</text>
+  <text x="995" y="248" class="mut" font-size="12.5">MariaDB (not MySQL 8)</text>
+  <text x="995" y="278" class="mono" fill="#E3B341" font-size="12.5">:3306</text>
+
+  <!-- ElastiCache -->
+  <rect x="975" y="320" width="275" height="92" rx="12" class="card" stroke="#E3B341" stroke-opacity="0.55" stroke-width="1.4"/>
+  <circle cx="991" cy="339" r="4" fill="#E3B341"/>
+  <text x="1003" y="344" class="t" font-size="15" font-weight="600">ElastiCache</text>
+  <text x="995" y="368" class="mut" font-size="12.5">Redis · cache + job queues</text>
+  <text x="995" y="398" class="mono" fill="#E3B341" font-size="12.5">:6379 · TLS</text>
+
+  <!-- S3 -->
+  <rect x="975" y="440" width="275" height="92" rx="12" class="card" stroke="#E3B341" stroke-opacity="0.55" stroke-width="1.4"/>
+  <circle cx="991" cy="459" r="4" fill="#E3B341"/>
+  <text x="1003" y="464" class="t" font-size="15" font-weight="600">Amazon S3</text>
+  <text x="995" y="488" class="mut" font-size="12.5">attachments</text>
+  <text x="995" y="516" class="mut mono" font-size="12">scoped IAM keys</text>
+
+  <!-- Secrets Manager -->
+  <rect x="975" y="560" width="275" height="92" rx="12" class="card" stroke="#A78BFA" stroke-opacity="0.6" stroke-width="1.4"/>
+  <circle cx="991" cy="579" r="4" fill="#A78BFA"/>
+  <text x="1003" y="584" class="t" font-size="15" font-weight="600">AWS Secrets Manager</text>
+  <text x="995" y="608" class="mut" font-size="12.5">MISP crypto · endpoints</text>
+  <text x="995" y="636" class="mut mono" font-size="12">ENCRYPTION_KEY · SALT · UUID</text>
+
+  <!-- ============ External Elastic (outside VPC) ============ -->
+  <rect x="1320" y="300" width="240" height="250" rx="14" class="card" stroke="#F5A524" stroke-opacity="0.65" stroke-width="1.5"/>
+  <circle cx="1336" cy="324" r="4" fill="#F5A524"/>
+  <text x="1348" y="329" class="t" font-size="15" font-weight="600">External Elastic SIEM</text>
+  <rect x="1342" y="350" width="196" height="74" rx="9" class="inner" stroke="#2A3340" stroke-width="1"/>
+  <text x="1358" y="376" class="t" font-size="13.5" font-weight="600">Elasticsearch</text>
+  <text x="1358" y="398" class="mut" font-size="12">logs-ti_misp_latest.*</text>
+  <rect x="1342" y="438" width="196" height="92" rx="9" class="inner" stroke="#2A3340" stroke-width="1"/>
+  <text x="1358" y="464" class="t" font-size="13.5" font-weight="600">Kibana</text>
+  <text x="1358" y="486" class="mut" font-size="12">Indicator Match rules</text>
+  <text x="1358" y="514" class="mut" font-size="12">→ alerts on active IOCs</text>
+
+  <!-- ============ FLOWS ============ -->
+  <!-- Internet -> ALB -->
+  <polyline points="151,299 151,345" fill="none" stroke="#38BDF8" stroke-width="1.8" marker-end="url(#ah-cyan)"/>
+  <g><rect x="112" y="310" width="92" height="22" rx="6" fill="#0E1116" stroke="#38BDF8" stroke-opacity="0.6"/><text x="158" y="325" text-anchor="middle" class="mono" fill="#38BDF8" font-size="11.5">HTTPS · 443</text></g>
+
+  <!-- ALB -> nginx -->
+  <polyline points="246,385 320,385 320,286 360,286" fill="none" stroke="#38BDF8" stroke-width="1.8" marker-end="url(#ah-cyan)"/>
+  <g><rect x="258" y="358" width="78" height="22" rx="6" fill="#0E1116" stroke="#38BDF8" stroke-opacity="0.6"/><text x="297" y="373" text-anchor="middle" class="mono" fill="#38BDF8" font-size="11.5">HTTP · 80</text></g>
+
+  <!-- nginx -> php-fpm -->
+  <polyline points="485,332 485,404" fill="none" stroke="#2DD4BF" stroke-width="1.8" marker-end="url(#ah-teal)"/>
+  <g><rect x="430" y="356" width="110" height="22" rx="6" fill="#0E1116" stroke="#2DD4BF" stroke-opacity="0.6"/><text x="485" y="371" text-anchor="middle" class="mono" fill="#2DD4BF" font-size="11">FastCGI · 9002</text></g>
+
+  <!-- php-fpm <-> modules (intra-pod) -->
+  <polyline points="485,496 485,516" fill="none" stroke="#2DD4BF" stroke-width="1.4" stroke-dasharray="3 3"/>
+
+  <!-- collector -> misp (pull) -->
+  <polyline points="700,360 645,392 612,420" fill="none" stroke="#F5A524" stroke-width="1.8" marker-end="url(#ah-amber)"/>
+  <g><rect x="612" y="368" width="118" height="22" rx="6" fill="#0E1116" stroke="#F5A524" stroke-opacity="0.6"/><text x="671" y="383" text-anchor="middle" class="mono" fill="#F5A524" font-size="11">pull · internal</text></g>
+
+  <!-- php-fpm -> RDS -->
+  <polyline points="588,455 940,455 940,246 975,246" fill="none" stroke="#E3B341" stroke-width="1.8" marker-end="url(#ah-sand)"/>
+  <g><rect x="922" y="224" width="58" height="22" rx="6" fill="#0E1116" stroke="#E3B341" stroke-opacity="0.6"/><text x="951" y="239" text-anchor="middle" class="mono" fill="#E3B341" font-size="11">3306</text></g>
+
+  <!-- php-fpm -> Redis -->
+  <polyline points="588,469 930,469 930,366 975,366" fill="none" stroke="#E3B341" stroke-width="1.8" marker-end="url(#ah-sand)"/>
+  <g><rect x="900" y="344" width="78" height="22" rx="6" fill="#0E1116" stroke="#E3B341" stroke-opacity="0.6"/><text x="939" y="359" text-anchor="middle" class="mono" fill="#E3B341" font-size="11">6379 TLS</text></g>
+
+  <!-- php-fpm -> S3 -->
+  <polyline points="588,486 925,486 975,486" fill="none" stroke="#E3B341" stroke-width="1.8" marker-end="url(#ah-sand)"/>
+  <g><rect x="828" y="464" width="64" height="22" rx="6" fill="#0E1116" stroke="#E3B341" stroke-opacity="0.6"/><text x="860" y="479" text-anchor="middle" class="mono" fill="#E3B341" font-size="11">S3 keys</text></g>
+
+  <!-- Secrets Manager -> pod (External Secrets) -->
+  <polyline points="975,606 925,606 925,590 612,590" fill="none" stroke="#A78BFA" stroke-width="1.8" marker-end="url(#ah-violet)"/>
+  <g><rect x="690" y="568" width="178" height="22" rx="6" fill="#0E1116" stroke="#A78BFA" stroke-opacity="0.6"/><text x="779" y="583" text-anchor="middle" class="mono" fill="#A78BFA" font-size="11">External Secrets · IRSA</text></g>
+
+  <!-- collector -> Elastic -->
+  <polyline points="782,240 782,162 1440,162 1440,300" fill="none" stroke="#F5A524" stroke-width="1.8" marker-end="url(#ah-amber)"/>
+  <g><rect x="1040" y="151" width="150" height="22" rx="6" fill="#0E1116" stroke="#F5A524" stroke-opacity="0.6"/><text x="1115" y="166" text-anchor="middle" class="mono" fill="#F5A524" font-size="11">TLS + API key · 443</text></g>
+
+  <!-- caption -->
+  <text x="300" y="844" class="mut" font-size="12.5">TLS terminates at the ALB; MISP serves :80 with X-Forwarded-For trust. The collector pulls MISP over the internal service and ships to external Elastic over TLS.</text>
+
+  <!-- legend -->
+  <g font-size="12.5">
+    <circle cx="48" cy="872" r="5" fill="#38BDF8"/><text x="60" y="876" class="mut">Edge / Web</text>
+    <circle cx="190" cy="872" r="5" fill="#2DD4BF"/><text x="202" y="876" class="mut">EKS workloads</text>
+    <circle cx="356" cy="872" r="5" fill="#E3B341"/><text x="368" y="876" class="mut">AWS managed data</text>
+    <circle cx="560" cy="872" r="5" fill="#A78BFA"/><text x="572" y="876" class="mut">Secrets / identity</text>
+    <circle cx="730" cy="872" r="5" fill="#F5A524"/><text x="742" y="876" class="mut">SIEM / intel</text>
+  </g>
+</svg>

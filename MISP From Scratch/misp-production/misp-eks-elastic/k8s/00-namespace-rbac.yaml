@@ -1,0 +1,27 @@
+# 00-namespace-rbac.yaml
+# Namespace + the two ServiceAccounts. Substitute ${ESO_ROLE_ARN} (from
+# `terraform output -raw eso_irsa_role_arn`) before applying — the README uses
+# envsubst for this.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${NAMESPACE}
+  labels:
+    # MISP runs as www-data with fsGroup 33; baseline PSS fits, restricted does not.
+    pod-security.kubernetes.io/enforce: baseline
+---
+# ServiceAccount the MISP pods run as.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: misp
+  namespace: ${NAMESPACE}
+---
+# ServiceAccount External Secrets uses to pull from AWS Secrets Manager (IRSA).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-secrets-misp
+  namespace: ${NAMESPACE}
+  annotations:
+    eks.amazonaws.com/role-arn: ${ESO_ROLE_ARN}

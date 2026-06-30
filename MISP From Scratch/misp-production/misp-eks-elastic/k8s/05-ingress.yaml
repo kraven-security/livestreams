@@ -1,0 +1,33 @@
+# 05-ingress.yaml
+# Internet-facing ALB provisioned by the AWS Load Balancer Controller. Terminates
+# TLS with the ACM cert and forwards HTTP to the nginx service. HTTP:80 redirects
+# to HTTPS:443.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: misp
+  namespace: ${NAMESPACE}
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: ${ACM_CERT_ARN}
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-path: /users/login
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+    # Optional hardening: restrict who can reach the ALB
+    # alb.ingress.kubernetes.io/inbound-cidrs: 203.0.113.0/24
+spec:
+  ingressClassName: alb
+  rules:
+    - host: ${MISP_HOSTNAME}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: misp-nginx
+                port:
+                  number: 80

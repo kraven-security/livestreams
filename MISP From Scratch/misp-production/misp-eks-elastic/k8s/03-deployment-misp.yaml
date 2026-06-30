@@ -1,0 +1,115 @@
+# 03-deployment-misp.yaml
+# Adapted from MISP/misp-docker kubernetes/manifests/deployment-misp.yaml.
+# Changes from upstream:
+#   - image tags pinned to ${CORE_TAG} / ${MODULES_TAG} (not :latest)
+#   - DB host + creds come from the mysql-credentials secret (RDS), not an in-cluster DB
+#   - Redis + crypto material + S3 come from instance-secrets (ElastiCache + S3)
+#   - modules container gets Redis via REDIS_BACKEND/REDIS_PORT/REDIS_PW mapping
+#   - attachments go to S3, so no attachment PVC
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: misp
+  namespace: ${NAMESPACE}
+  labels:
+    app: misp
+spec:
+  replicas: 1            # see README "Hardening" before scaling >1 (sessions/salt)
+  strategy:
+    type: Recreate       # avoids concurrent writers during rollout
+  selector:
+    matchLabels:
+      app: misp
+  template:
+    metadata:
+      labels:
+        app: misp
+    spec:
+      serviceAccountName: misp
+      enableServiceLinks: false   # don't inject service env vars
+      securityContext:
+        fsGroup: 33               # www-data, so mounted files are writable
+      containers:
+        # ---- PHP-FPM application container ----
+        - name: misp
+          image: ghcr.io/misp/misp-docker/misp-core:${CORE_TAG}
+          imagePullPolicy: IfNotPresent
+          command: ["/kubernetes/entrypoint_fpm.sh"]
+          ports:
+            - name: php-fpm
+              containerPort: 9002
+          readinessProbe:
+            tcpSocket:
+              port: 9002
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            failureThreshold: 2
+          # Add a liveness probe too (upstream ships readiness only)
+          livenessProbe:
+            tcpSocket:
+              port: 9002
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 4
+          env:
+            - name: DISABLE_PRINTING_PLAINTEXT_CREDENTIALS
+              value: "true"
+            - name: ENABLE_BACKGROUND_UPDATES
+              value: "true"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: MISP_MODULES_FQDN
+              value: "http://localhost"     # modules sidecar in same pod
+          envFrom:
+            - secretRef:
+                name: mysql-credentials      # MYSQL_HOST(=RDS), MYSQL_USER, MYSQL_PASSWORD, ...
+            - secretRef:
+                name: instance-secrets       # BASE_URL, REDIS_*, ENCRYPTION_KEY, SECURITY_SALT, S3_*, GPG_PASSPHRASE, ADMIN_*
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "50m"
+            limits:
+              memory: "2048Mi"
+          volumeMounts:
+            - name: logs
+              mountPath: /var/www/MISP/app/tmp/logs
+        # ---- MISP modules sidecar ----
+        - name: misp-modules
+          image: ghcr.io/misp/misp-docker/misp-modules:${MODULES_TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: modules
+              containerPort: 6666
+          readinessProbe:
+            tcpSocket:
+              port: 6666
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          env:
+            # modules uses different Redis var names than core
+            - name: REDIS_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: instance-secrets
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: instance-secrets
+                  key: REDIS_PORT
+            - name: REDIS_PW
+              valueFrom:
+                secretKeyRef:
+                  name: instance-secrets
+                  key: REDIS_PASSWORD
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "20m"
+            limits:
+              memory: "2048Mi"
+      volumes:
+        - name: logs
+          emptyDir: {}

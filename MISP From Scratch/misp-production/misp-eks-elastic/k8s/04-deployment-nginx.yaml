@@ -1,0 +1,58 @@
+# 04-deployment-nginx.yaml
+# Adapted from MISP/misp-docker kubernetes/manifests/deployment-nginx.yaml.
+# The ALB terminates TLS (ACM), so nginx serves the app over plain HTTP on :80
+# (DISABLE_SSL_REDIRECT=true). NGINX_X_FORWARDED_FOR + NGINX_SET_REAL_IP_FROM make
+# MISP trust the ALB's forwarded scheme/IP — this is the fix for the redirect-loop /
+# CSRF errors you get when MISP sits behind a TLS-terminating load balancer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: misp-nginx
+  namespace: ${NAMESPACE}
+  labels:
+    app: misp-nginx
+spec:
+  replicas: 2            # nginx is a stateless proxy — safe to scale
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: misp-nginx
+  template:
+    metadata:
+      labels:
+        app: misp-nginx
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: nginx
+          image: ghcr.io/misp/misp-docker/misp-core:${CORE_TAG}  # same image, nginx entrypoint
+          imagePullPolicy: IfNotPresent
+          command: ["/kubernetes/entrypoint_nginx.sh"]
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            tcpSocket:
+              port: 80
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          env:
+            - name: DISABLE_SSL_REDIRECT
+              value: "true"                  # ALB does TLS; serve app on :80
+            - name: NGINX_X_FORWARDED_FOR
+              value: "true"
+            - name: NGINX_SET_REAL_IP_FROM
+              value: "${VPC_CIDR}"           # trust forwarded headers from the ALB (in-VPC)
+          envFrom:
+            - secretRef:
+                name: instance-secrets        # BASE_URL etc.
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "50m"
+            limits:
+              memory: "1024Mi"

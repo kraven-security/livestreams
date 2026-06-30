@@ -1,0 +1,34 @@
+# 02-services.yaml
+# ClusterIP services. The nginx pod reaches PHP-FPM via the `misp` service on 9002
+# (the Kubernetes nginx entrypoint expects this name — verify against your image
+# build if FastCGI fails to connect). The ALB targets the `misp-nginx` service.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: misp           # MUST be "misp" — nginx fastcgi_pass targets misp:9002
+  namespace: ${NAMESPACE}
+spec:
+  type: ClusterIP
+  selector:
+    app: misp
+  ports:
+    - name: php-fpm
+      port: 9002
+      targetPort: 9002
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: misp-nginx
+  namespace: ${NAMESPACE}
+spec:
+  type: ClusterIP
+  selector:
+    app: misp-nginx
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
