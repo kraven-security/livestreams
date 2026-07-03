@@ -1,11 +1,15 @@
-# MISP in Production on AWS EKS + Elastic SIEM — Reproducible Runbook
+# MISP in Production on AWS EKS — Reproducible Runbook
 
 Deploy a production-shaped MISP onto **AWS EKS** with **Terraform**, using the
 **official `MISP/misp-docker` Kubernetes manifests** (adapted), with externalized
 state (**RDS MariaDB**, **ElastiCache Redis**, **S3** attachments), behind an
-**ALB + ACM TLS**, secrets from **AWS Secrets Manager** via **External Secrets**,
-then wire it into an **existing/external Elastic** SIEM **two ways** (Elastic Agent
-`ti_misp` and Filebeat) and fire an **Indicator Match** alert end-to-end.
+**ALB + ACM TLS**, secrets from **AWS Secrets Manager** via **External Secrets** —
+then harden it and validate the deployment end to end.
+
+> **Scope note:** connecting MISP to a SIEM (Elastic — Agent `ti_misp` / Filebeat,
+> Indicator Match) is intentionally **out of scope here** and covered in a separate,
+> dedicated episode + runbook. This one takes you to a hardened, validated production
+> MISP.
 
 > This is the companion repo to the livestream plan. Run of show, timings, fallbacks,
 > and the production-readiness checklist live in
@@ -15,10 +19,11 @@ then wire it into an **existing/external Elastic** SIEM **two ways** (Elastic Ag
 
 ## What gets built
 
-![MISP on AWS EKS to Elastic SIEM architecture](architecture.svg)
+![MISP on AWS EKS production architecture](architecture.svg)
 
-The collector lives **inside** EKS, pulls MISP over the **internal** service (the
-REST API is never exposed publicly), and ships **out** to your external Elastic.
+A production-shaped MISP: the web tier (nginx + php-fpm) and modules run in EKS, all
+state is externalized to AWS managed services (RDS, ElastiCache, S3), secrets flow
+from Secrets Manager via External Secrets, and the ALB terminates TLS with ACM.
 
 ---
 
@@ -36,13 +41,11 @@ misp-eks-elastic/
 │   ├── 04-deployment-nginx.yaml  ← from official deployment-nginx.yaml
 │   ├── 05-ingress.yaml
 │   └── 06-networkpolicy.yaml     ← apply LAST
-├── elastic/
-│   ├── filebeat-collector.yaml   ← Method 2 (in-cluster Filebeat)
-│   ├── elastic-agent-misp-fleet.md ← Method 1 (Fleet Agent + ti_misp)
-│   └── indicator-match-rule.md
-└── scripts/
-    └── create-misp-sync-user.sh
+└── architecture.svg
 ```
+
+> SIEM integration files (Filebeat / Elastic Agent configs, sync-user script,
+> Indicator Match rule) live in the separate Elastic episode's repo, not here.
 
 ---
 
@@ -51,9 +54,6 @@ misp-eks-elastic/
 **Tools** (recent versions): `awscli` v2, `terraform` ≥ 1.6, `kubectl`, `helm`,
 `envsubst` (from `gettext`), `jq`. An AWS account with admin-ish permissions and a
 **registered domain / Route 53 hosted zone**.
-
-**Existing Elastic**: a reachable Elasticsearch + Kibana (Elastic Cloud or self-hosted)
-and, for Method 1, a Fleet Server.
 
 **OFF-AIR (do these before any live demo):**
 1. **Issue + DNS-validate an ACM cert** for your MISP hostname in the cluster region.
@@ -201,40 +201,48 @@ render 06-networkpolicy.yaml
 
 ---
 
-## Phase 5 — Connect to Elastic (both methods)
+## Phase 5 — Validate the deployment
 
-### Create the read-only MISP sync user
+Prove production MISP actually works — not just that pods are green. This is the
+episode's payoff.
+
+**Background jobs / workers are alive:** Administration → Server Settings →
+Diagnostics (or Workers). All queues (default, prio, email, cache, update) should
+show running workers connected to the shared ElastiCache.
+
+**Redis + DB connectivity:** the Diagnostics page should report the DB schema up to
+date and Redis reachable. Confirm no config warnings.
+
+**Attachment round-trip on S3:** create an event, add an attachment, then confirm the
+object landed in the bucket:
 ```bash
-cd ../scripts
-NAMESPACE="$NAMESPACE" ./create-misp-sync-user.sh elastic@kravensecurity.com
-# copy the printed auth key
+aws s3 ls "s3://$(cd ../terraform && terraform output -raw attachments_bucket)/" --recursive | tail
 ```
 
-### Method 2 — Filebeat (lightweight, in-cluster)
+**Feeds work (egress + jobs):** Sync Actions → Feeds → enable a default feed (e.g. a
+CIRCL or Abuse.ch feed) → Fetch and store. A background job should run and events
+should appear — this exercises internet egress, workers, and the DB together.
+
+**API smoke test:** create an auth key (your admin user) and hit the REST API through
+the ALB to confirm the public path + TLS + app all line up:
 ```bash
-cd ../elastic
-# edit filebeat-collector.yaml secret: MISP_API_TOKEN, ELASTIC_HOST, ELASTIC_API_KEY
-envsubst < filebeat-collector.yaml | kubectl apply -f -
-kubectl -n "$NAMESPACE" logs deploy/filebeat-misp -f
+curl -s -H "Authorization: $MISP_AUTHKEY" -H "Accept: application/json" \
+  "https://$MISP_HOSTNAME/servers/getVersion" | jq .
 ```
 
-### Method 1 — Elastic Agent + `ti_misp` (recommended)
-Follow `elastic-agent-misp-fleet.md`: enroll an in-cluster Agent into your external
-Fleet, add the **MISP** Threat Intel integration (internal URL + sync-user key +
-type/tag filters), and let its Transform maintain the **latest/active** IOC index.
-
-**Recommendation to deliver:** Agent `ti_misp` for production (handles IOC decay +
-dashboards); Filebeat when you want light/no-Fleet.
+**HA sanity (optional):** with ALB stickiness on, scale `misp` to 2 and confirm a
+logged-in session survives a request served by the other pod (thanks to the pinned
+`ENCRYPTION_KEY` / `SECURITY_SALT`).
 
 ---
 
-## Phase 6 — Validate end-to-end
+## Next episode — MISP → SIEM (Elastic)
 
-Follow `indicator-match-rule.md`:
-1. Set `securitySolution:defaultThreatIndex` to include `logs-ti_misp_latest.*`.
-2. Create an **Indicator Match** rule pointing at `logs-ti_misp_latest.threat_attributes`.
-3. Plant a controlled, published, tagged test IOC in MISP.
-4. Generate matching telemetry → an alert fires in Security → Alerts.
+Wiring MISP into Elastic (a read-only sync user, an in-cluster collector pulling IOCs
+over the internal service, Elastic Agent `ti_misp` vs Filebeat, IOC decay, and
+Indicator Match alerting) is a dedicated follow-up with its own runbook and repo.
+Nothing in **this** deployment needs to change to support it later — the collector
+lives beside MISP and only needs egress to your Elastic.
 
 ---
 
@@ -277,15 +285,13 @@ present — confirm the namespace (and its Ingress) is fully deleted first.
 
 ## Verify-before-air (build-specific items to confirm in a dry run)
 
-These depend on your exact image build / Elastic version — check them off in rehearsal:
+These depend on your exact image build — check them off in rehearsal:
 - [ ] nginx entrypoint really targets `misp:9002` (else set the FastCGI host)
 - [ ] nginx serves the app on **:80** when `DISABLE_SSL_REDIRECT=true`
 - [ ] exact HA var names for salt/UUID in your `CORE_TAG` (README HA section lists
       `SALT`/`UUID`; this stack uses `SECURITY_SALT` + `MISP_UUID` — confirm both are honored)
 - [ ] MISP S3 attachment storage works with the scoped IAM **keys** (IRSA may not
       cover MISP's S3 client)
-- [ ] Filebeat / Elastic Agent image tag matches your Elastic stack version
-- [ ] MISP role IDs in `create-misp-sync-user.sh` (read-only = 6 by default; verify)
 
 ---
 
@@ -296,5 +302,4 @@ These depend on your exact image build / Elastic version — check them off in r
 | 1 | Segment A — EKS via Terraform |
 | 2–3 | Segment B — MISP on k8s |
 | 4 | Segment C — Production hardening |
-| 5 | Segment D — Connect to Elastic (both ways) |
-| 6 | Segment E — Validation |
+| 5 | Segment D — Validate the deployment |
