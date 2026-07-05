@@ -85,15 +85,17 @@ cd terraform
 cp terraform.tfvars.example terraform.tfvars
 # Edit terraform.tfvars: region, cluster_name, misp_hostname, acm_certificate_arn
 
+export AWS_PROFILE=misp-eks       # or whatever you configured — see docs/aws-cli-configuration.md
 terraform init
 terraform plan -out tfplan        # review off-air; save the plan
 terraform apply tfplan            # ~15–20 min (EKS + RDS + Redis)
 ```
 
 This creates: VPC (3 AZ), EKS + managed node group, AWS Load Balancer Controller,
-External Secrets Operator, RDS MariaDB, ElastiCache Redis (TLS), S3 attachments
-bucket + scoped IAM keys, and the two Secrets Manager secrets (with the AWS
-endpoints and generated MISP crypto material baked in).
+External Secrets Operator, the EBS CSI driver addon (with its own IRSA role —
+`irsa-ebs-csi.tf`), RDS MariaDB, ElastiCache Redis (TLS), S3 attachments bucket +
+scoped IAM keys, and the two Secrets Manager secrets (with the AWS endpoints and
+generated MISP crypto material baked in).
 
 Point `kubectl` at the cluster and capture outputs:
 
@@ -274,6 +276,26 @@ lives beside MISP and only needs egress to your Elastic.
 - **Image pull slow/stalls** → pre-pull `misp-core` onto nodes off-air; pin SHAs.
 - **NetworkPolicy broke things** → you applied `06-` too early or CIDRs are wrong;
   delete it, get healthy, reapply with correct VPC CIDR.
+- **`terraform apply` fails with "No valid credential sources found"** → `AWS_PROFILE`
+  isn't exported in this shell. See
+  [`docs/aws-cli-configuration.md`](docs/aws-cli-configuration.md).
+- **`terraform apply`/`plan` fails with "Error acquiring the state lock"** → another
+  apply is already running (check `ps aux | grep terraform`) — don't force-unlock;
+  either wait for it or `Ctrl+C` it (releases the lock cleanly) before retrying.
+- **`aws-ebs-csi-driver` addon stuck `CREATING` / controller pods `CrashLoopBackOff`
+  with `ec2:DescribeAvailabilityZones ... UnauthorizedOperation`** → the addon has no
+  `service_account_role_arn`, so the driver falls back to the bare node role, which
+  can't call EC2. Fixed by the IRSA role in `irsa-ebs-csi.tf` wired into
+  `eks.tf`'s `cluster_addons.aws-ebs-csi-driver`. If you change *any* addon's
+  `service_account_role_arn` after its pods already exist, they won't pick up the new
+  credentials until restarted — `kubectl -n kube-system rollout restart
+  deployment/ebs-csi-controller` — since IRSA env vars/token are only injected at pod
+  creation time.
+- **Helm error "cannot re-use a name that is still in use"** → an earlier
+  interrupted `terraform apply` left an orphaned Helm release in the cluster that
+  Terraform's state doesn't know about (check `helm list -A --all` for a `failed`
+  release). Clean it up with `helm -n <namespace> uninstall <release>`, then re-plan
+  and apply.
 
 ---
 
