@@ -24,10 +24,14 @@ module "eks" {
   subnet_ids = module.vpc.private_subnets
 
   cluster_addons = {
-    coredns                = {}
-    kube-proxy             = {}
-    vpc-cni                = {}
-    aws-ebs-csi-driver     = {}
+    coredns    = {}
+    kube-proxy = {}
+    vpc-cni    = {}
+    aws-ebs-csi-driver = {
+      # IRSA role from irsa-ebs-csi.tf — without it the driver runs under the bare
+      # node role (no EBS permissions), which can leave the addon DEGRADED.
+      service_account_role_arn = aws_iam_role.ebs_csi.arn
+    }
     eks-pod-identity-agent = {}
   }
 
