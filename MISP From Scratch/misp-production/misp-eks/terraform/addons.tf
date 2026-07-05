@@ -15,6 +15,13 @@ module "eks_blueprints_addons" {
   enable_aws_load_balancer_controller = true
   enable_external_secrets             = true
 
+  # Workaround for an upstream bug in eks-blueprints-addons v1.24.x: it requires
+  # helm >= 3.0 but still defaults `postrender` to `[]`, which no longer type-checks
+  # against the helm v3 provider schema (postrender is now a single object, not a
+  # list). Explicitly passing `postrender = null` short-circuits that default.
+  aws_load_balancer_controller = { postrender = null }
+  external_secrets             = { postrender = null }
+
   # Optional: EFS CSI driver if you choose the RWX-PVC path for attachments
   # instead of S3. Leave off if you use S3 (recommended).
   # enable_aws_efs_csi_driver = true

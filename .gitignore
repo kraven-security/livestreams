@@ -35,6 +35,7 @@ env/
 crash.log
 crash.*.log
 .terraform.lock.hcl
+tfplan
 
 # Kubernetes / kubeconfig
 kubeconfig
