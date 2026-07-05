@@ -251,16 +251,6 @@ logged-in session survives a request served by the other pod (thanks to the pinn
 
 ---
 
-## Next episode — MISP → SIEM (Elastic)
-
-Wiring MISP into Elastic (a read-only sync user, an in-cluster collector pulling IOCs
-over the internal service, Elastic Agent `ti_misp` vs Filebeat, IOC decay, and
-Indicator Match alerting) is a dedicated follow-up with its own runbook and repo.
-Nothing in **this** deployment needs to change to support it later — the collector
-lives beside MISP and only needs egress to your Elastic.
-
----
-
 ## Troubleshooting (the on-air gotchas, with fixes)
 
 - **Redirect loop / CSRF behind ALB** → confirm `DISABLE_SSL_REDIRECT=true` on nginx,
