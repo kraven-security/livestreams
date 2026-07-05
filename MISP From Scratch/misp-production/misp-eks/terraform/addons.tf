@@ -20,6 +20,6 @@ module "eks_blueprints_addons" {
   # enable_aws_efs_csi_driver = true
 
   tags = {
-    Project = "misp-eks-elastic"
+    Project = "misp-eks"
   }
 }

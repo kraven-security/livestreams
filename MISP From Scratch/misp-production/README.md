@@ -30,7 +30,7 @@ from Secrets Manager via External Secrets, and the ALB terminates TLS with ACM.
 ## Repo layout
 
 ```
-misp-eks-elastic/
+misp-eks/
 ├── README.md                     ← you are here
 ├── docs/                         ← supporting runbooks
 │   ├── acm-certificate-setup.md  ← issuing + DNS-validating the ACM cert via Cloudflare

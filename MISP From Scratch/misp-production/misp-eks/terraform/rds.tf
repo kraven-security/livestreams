@@ -69,8 +69,9 @@ module "rds" {
   subnet_ids             = module.vpc.private_subnets
 
   # InnoDB buffer pool ~ 70% of instance RAM is a reasonable starting point; MISP is
-  # read-heavy on correlation. Tune via a custom parameter group for real load.
-  family_parameters = {}
+  # read-heavy on correlation. Tune via `parameters` (list of DB parameter maps) for
+  # real load; left empty here to take the RDS family defaults.
+  parameters = []
 
   backup_retention_period = 7
   deletion_protection     = false # set true for production

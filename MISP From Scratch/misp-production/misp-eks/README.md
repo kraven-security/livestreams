@@ -30,7 +30,7 @@ from Secrets Manager via External Secrets, and the ALB terminates TLS with ACM.
 ## Repo layout
 
 ```
-misp-eks-elastic/
+misp-eks/
 ├── README.md                     ← you are here
 ├── terraform/                    ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
 ├── k8s/                          ← adapted MISP manifests (envsubst placeholders)
