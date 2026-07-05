@@ -1,11 +1,14 @@
 # 03-deployment-misp.yaml
 # Adapted from MISP/misp-docker kubernetes/manifests/deployment-misp.yaml.
 # Changes from upstream:
-#   - image tags pinned to ${CORE_TAG} / ${MODULES_TAG} (not :latest)
+#   - image tag pinned to ${CORE_TAG} (not :latest)
 #   - DB host + creds come from the mysql-credentials secret (RDS), not an in-cluster DB
 #   - Redis + crypto material + S3 come from instance-secrets (ElastiCache + S3)
-#   - modules container gets Redis via REDIS_BACKEND/REDIS_PORT/REDIS_PW mapping
 #   - attachments go to S3, so no attachment PVC
+#
+# As of CORE_TAG>=v2.5.42, misp-modules is a separate Deployment/Service
+# (03b-deployment-misp-modules.yaml), not a sidecar here — see MISP_MODULES_FQDN
+# below.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -76,7 +79,7 @@ spec:
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: MISP_MODULES_FQDN
-              value: "http://localhost"     # modules sidecar in same pod
+              value: "http://misp-modules"  # separate Deployment/Service as of v2.5.42
           envFrom:
             - secretRef:
                 name: mysql-credentials      # MYSQL_HOST(=RDS), MYSQL_USER, MYSQL_PASSWORD, ...
@@ -91,41 +94,6 @@ spec:
           volumeMounts:
             - name: logs
               mountPath: /var/www/MISP/app/tmp/logs
-        # ---- MISP modules sidecar ----
-        - name: misp-modules
-          image: ghcr.io/misp/misp-docker/misp-modules:${MODULES_TAG}
-          imagePullPolicy: IfNotPresent
-          ports:
-            - name: modules
-              containerPort: 6666
-          readinessProbe:
-            tcpSocket:
-              port: 6666
-            initialDelaySeconds: 1
-            periodSeconds: 5
-          env:
-            # modules uses different Redis var names than core
-            - name: REDIS_BACKEND
-              valueFrom:
-                secretKeyRef:
-                  name: instance-secrets
-                  key: REDIS_HOST
-            - name: REDIS_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: instance-secrets
-                  key: REDIS_PORT
-            - name: REDIS_PW
-              valueFrom:
-                secretKeyRef:
-                  name: instance-secrets
-                  key: REDIS_PASSWORD
-          resources:
-            requests:
-              memory: "128Mi"
-              cpu: "20m"
-            limits:
-              memory: "2048Mi"
       volumes:
         - name: logs
           emptyDir: {}

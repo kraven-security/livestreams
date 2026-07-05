@@ -1,0 +1,64 @@
+# 03b-deployment-misp-modules.yaml
+# As of CORE_TAG>=v2.5.42, misp-docker moved misp-modules out of the misp pod
+# (where it ran as a localhost sidecar) into its own Deployment, reached by the
+# misp container over the misp-modules Service (see 02-services.yaml and
+# MISP_MODULES_FQDN in 03-deployment-misp.yaml). Env vars/resources unchanged from
+# the old sidecar.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: misp-modules
+  namespace: ${NAMESPACE}
+  labels:
+    app: misp-modules
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: misp-modules
+  template:
+    metadata:
+      labels:
+        app: misp-modules
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: misp-modules
+          image: ghcr.io/misp/misp-docker/misp-modules:${MODULES_TAG}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: misp-modules
+              containerPort: 6666
+          readinessProbe:
+            tcpSocket:
+              port: 6666
+            initialDelaySeconds: 1
+            periodSeconds: 5
+          env:
+            # modules uses different Redis var names than core
+            - name: REDIS_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: instance-secrets
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: instance-secrets
+                  key: REDIS_PORT
+            - name: REDIS_PW
+              valueFrom:
+                secretKeyRef:
+                  name: instance-secrets
+                  key: REDIS_PASSWORD
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "20m"
+            limits:
+              memory: "2048Mi"

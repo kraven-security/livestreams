@@ -32,7 +32,8 @@ spec:
         - protocol: TCP
           port: 53
 ---
-# 3) ALB -> nginx on 80 (ALB targets pod IPs from within the VPC)
+# 3) ALB -> nginx on 8080 (ALB target-type=ip hits the pod's targetPort directly,
+#    not the Service's external port 80 — see 02-services.yaml)
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -49,7 +50,7 @@ spec:
             cidr: ${VPC_CIDR}
       ports:
         - protocol: TCP
-          port: 80
+          port: 8080
 ---
 # 4) nginx -> misp (php-fpm) on 9002
 apiVersion: networking.k8s.io/v1
@@ -117,3 +118,71 @@ spec:
       ports:
         - protocol: TCP
           port: 9002
+---
+# 7) misp -> misp-modules on 6666. As of CORE_TAG>=v2.5.42 misp-modules is a
+#    separate pod (previously a same-pod localhost sidecar, invisible to
+#    NetworkPolicy) — this traffic is now real inter-pod traffic that
+#    default-deny would otherwise silently block.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-misp-egress-modules
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: misp
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: misp-modules
+      ports:
+        - protocol: TCP
+          port: 6666
+---
+# 8) misp-modules: accept from misp on 6666; needs Redis (cache) + internet HTTPS
+#    egress too (enrichment modules call out to VT, passive DNS, etc.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-modules-ingress-from-misp
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: misp-modules
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: misp
+      ports:
+        - protocol: TCP
+          port: 6666
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-modules-egress
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: misp-modules
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: ${VPC_CIDR}
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443     # module lookups (VT, passive DNS, etc.)

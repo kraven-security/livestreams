@@ -1,8 +1,10 @@
 # 02-services.yaml
 # ClusterIP services. The nginx pod reaches PHP-FPM via the `misp-php` service on
-# 9002 — the official misp-docker image's /kubernetes/entrypoint_nginx.sh hardcodes
-# `fastcgi_pass misp-php:9002` (sed-replaced, not configurable via env var), so this
-# name is not cosmetic. The ALB targets the `misp-nginx` service.
+# 9002 — CORE_TAG>=v2.5.42's nginx.conf (04b-nginx-configmap.yaml) hardcodes
+# `fastcgi_pass misp-php:9002`, so this name is not cosmetic. The ALB targets the
+# `misp-nginx` service on port 80, which forwards to the container's port 8080
+# (nginx.conf's `listen 8080`). misp-modules is its own Service as of v2.5.42 —
+# previously a same-pod sidecar reachable over localhost.
 
 apiVersion: v1
 kind: Service
@@ -31,5 +33,20 @@ spec:
   ports:
     - name: http
       port: 80
-      targetPort: 80
+      targetPort: 8080
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: misp-modules     # MUST be "misp-modules" — misp's MISP_MODULES_FQDN targets it
+  namespace: ${NAMESPACE}
+spec:
+  type: ClusterIP
+  selector:
+    app: misp-modules
+  ports:
+    - name: misp-modules
+      port: 6666
+      targetPort: 6666
       protocol: TCP

@@ -1,9 +1,9 @@
 # 04-deployment-nginx.yaml
 # Adapted from MISP/misp-docker kubernetes/manifests/deployment-nginx.yaml.
-# The ALB terminates TLS (ACM), so nginx serves the app over plain HTTP on :80
-# (DISABLE_SSL_REDIRECT=true). NGINX_X_FORWARDED_FOR + NGINX_SET_REAL_IP_FROM make
-# MISP trust the ALB's forwarded scheme/IP — this is the fix for the redirect-loop /
-# CSRF errors you get when MISP sits behind a TLS-terminating load balancer.
+# As of CORE_TAG>=v2.5.42, nginx is the stock binary (+tini), config supplied
+# entirely by the nginx-conf ConfigMap (04b-nginx-configmap.yaml) — no more
+# custom entrypoint script or NGINX_*/DISABLE_SSL_REDIRECT env vars. The ALB
+# terminates TLS (ACM); nginx only ever serves plain HTTP on :8080.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,26 +27,23 @@ spec:
         app: misp-nginx
     spec:
       enableServiceLinks: false
+      securityContext:
+        fsGroup: 33
+        runAsUser: 33     # www-data
       containers:
         - name: nginx
           image: ghcr.io/misp/misp-docker/misp-core:${CORE_TAG}  # same image, nginx entrypoint
           imagePullPolicy: IfNotPresent
-          command: ["/kubernetes/entrypoint_nginx.sh"]
+          command: ["/usr/bin/tini"]
+          args: ["nginx", "--", "-g", "daemon off;"]
           ports:
             - name: http
-              containerPort: 80
+              containerPort: 8080
           readinessProbe:
             tcpSocket:
-              port: 80
+              port: 8080
             initialDelaySeconds: 1
             periodSeconds: 5
-          env:
-            - name: DISABLE_SSL_REDIRECT
-              value: "true"                  # ALB does TLS; serve app on :80
-            - name: NGINX_X_FORWARDED_FOR
-              value: "true"
-            - name: NGINX_SET_REAL_IP_FROM
-              value: "${VPC_CIDR}"           # trust forwarded headers from the ALB (in-VPC)
           envFrom:
             - secretRef:
                 name: instance-secrets        # BASE_URL etc.
@@ -56,3 +53,19 @@ spec:
               cpu: "50m"
             limits:
               memory: "1024Mi"
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+            - name: nginx-body
+              mountPath: /var/lib/nginx/
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-conf
+            items:
+              - key: nginx.conf
+                path: nginx.conf
+        - name: nginx-body
+          emptyDir:
+            sizeLimit: 50Mi
