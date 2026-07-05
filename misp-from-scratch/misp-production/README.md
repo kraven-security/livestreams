@@ -35,7 +35,8 @@ misp-eks/
 ├── docs/                         ← supporting runbooks
 │   ├── acm-certificate-setup.md    ← issuing + DNS-validating the ACM cert via Cloudflare
 │   ├── tool-installation.md       ← installing awscli, terraform, kubectl, helm, envsubst, jq
-│   └── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
+│   ├── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
+│   └── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
 ├── terraform/                    ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
 ├── k8s/                          ← adapted MISP manifests (envsubst placeholders)
 │   ├── 00-namespace-rbac.yaml
@@ -156,7 +157,9 @@ kubectl -n "$NAMESPACE" get ingress misp \
 
 ## Phase 3 — DNS cutover + first login
 
-Point `MISP_HOSTNAME` at the ALB (Route 53 ALIAS/CNAME). Then:
+Point `MISP_HOSTNAME` at the ALB (Route 53 ALIAS/CNAME, or see
+[`docs/dns-cutover-cloudflare.md`](docs/dns-cutover-cloudflare.md) if your domain is
+on Cloudflare instead). Then:
 
 - Browse to `https://$MISP_HOSTNAME` — the ACM cert should be valid.
 - Log in with `admin@$MISP_HOSTNAME` / the generated admin password:
@@ -263,9 +266,11 @@ lives beside MISP and only needs egress to your Elastic.
 - **Redirect loop / CSRF behind ALB** → confirm `DISABLE_SSL_REDIRECT=true` on nginx,
   `NGINX_X_FORWARDED_FOR=true`, `NGINX_SET_REAL_IP_FROM=$VPC_CIDR`, and
   `BASE_URL=https://$MISP_HOSTNAME`. Pin `ENCRYPTION_KEY`/`SECURITY_SALT` across replicas.
-- **nginx 502 / FastCGI cannot connect** → the `misp` Service must be named exactly
-  `misp` on 9002; the nginx entrypoint targets `misp:9002`. Verify the service and
-  that php-fpm is ready.
+- **nginx `CrashLoopBackOff` with `host not found in upstream "misp-php"` / FastCGI
+  cannot connect** → the php-fpm Service must be named exactly `misp-php` on 9002;
+  the official image's `/kubernetes/entrypoint_nginx.sh` hardcodes
+  `fastcgi_pass misp-php:9002` (not configurable via env var). Verify the service
+  name and that php-fpm is ready.
 - **DB login error `3098 table does not comply ... external plugin`** → you're on
   MySQL 8, not MariaDB. This stack uses RDS **MariaDB** for that reason.
 - **Redis TLS handshake fails** → ElastiCache transit encryption needs the real
@@ -318,7 +323,9 @@ present — confirm the namespace (and its Ingress) is fully deleted first.
 ## Verify-before-air (build-specific items to confirm in a dry run)
 
 These depend on your exact image build — check them off in rehearsal:
-- [ ] nginx entrypoint really targets `misp:9002` (else set the FastCGI host)
+- [x] nginx entrypoint really targets `misp-php:9002` (hardcoded in
+      `/kubernetes/entrypoint_nginx.sh` — confirmed against `CORE_TAG=v2.5.30`;
+      the php-fpm Service in `02-services.yaml` is named `misp-php` to match)
 - [ ] nginx serves the app on **:80** when `DISABLE_SSL_REDIRECT=true`
 - [ ] exact HA var names for salt/UUID in your `CORE_TAG` (README HA section lists
       `SALT`/`UUID`; this stack uses `SECURITY_SALT` + `MISP_UUID` — confirm both are honored)

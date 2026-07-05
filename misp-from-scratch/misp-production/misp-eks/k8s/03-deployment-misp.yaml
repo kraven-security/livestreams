@@ -38,6 +38,15 @@ spec:
           ports:
             - name: php-fpm
               containerPort: 9002
+          # First boot runs DB schema apply + GnuPG keypair generation, which can take
+          # several minutes — without this, the liveness probe below kills the container
+          # before it ever finishes, resetting init in a loop. Liveness/readiness are
+          # suspended until this succeeds once.
+          startupProbe:
+            tcpSocket:
+              port: 9002
+            periodSeconds: 10
+            failureThreshold: 60   # up to 10 min for first boot
           readinessProbe:
             tcpSocket:
               port: 9002
