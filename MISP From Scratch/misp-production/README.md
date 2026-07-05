@@ -33,7 +33,8 @@ from Secrets Manager via External Secrets, and the ALB terminates TLS with ACM.
 misp-eks-elastic/
 ├── README.md                     ← you are here
 ├── docs/                         ← supporting runbooks
-│   └── acm-certificate-setup.md  ← issuing + DNS-validating the ACM cert via Cloudflare
+│   ├── acm-certificate-setup.md  ← issuing + DNS-validating the ACM cert via Cloudflare
+│   └── tool-installation.md      ← installing awscli, terraform, kubectl, helm, envsubst, jq
 ├── terraform/                    ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
 ├── k8s/                          ← adapted MISP manifests (envsubst placeholders)
 │   ├── 00-namespace-rbac.yaml
@@ -55,7 +56,9 @@ misp-eks-elastic/
 
 **Tools** (recent versions): `awscli` v2, `terraform` ≥ 1.6, `kubectl`, `helm`,
 `envsubst` (from `gettext`), `jq`. An AWS account with admin-ish permissions and a
-**registered domain / Route 53 hosted zone**.
+**registered domain / Route 53 hosted zone**. See
+[`docs/tool-installation.md`](docs/tool-installation.md) for install steps for
+each tool.
 
 **OFF-AIR (do these before any live demo):**
 1. **Issue + DNS-validate an ACM cert** for your MISP hostname in the cluster region.
