@@ -73,10 +73,10 @@ resource "aws_secretsmanager_secret_version" "instance" {
     # Public URL + proxy awareness (behind the ALB)
     BASE_URL = "https://${var.misp_hostname}"
 
-    # Redis (real endpoint for TLS SNI; auth token)
+    # Redis (real endpoint; no transit encryption/auth token — see elasticache.tf)
     REDIS_HOST     = aws_elasticache_replication_group.this.primary_endpoint_address
     REDIS_PORT     = "6379"
-    REDIS_PASSWORD = random_password.redis_auth.result
+    REDIS_PASSWORD = ""
 
     # S3 attachments
     S3_ENABLE     = "true"

@@ -1,18 +1,16 @@
 # elasticache.tf
-# Managed Redis (ElastiCache) for MISP cache + background job queues. Transit
-# encryption + an auth token are enabled.
+# Managed Redis (ElastiCache) for MISP cache + background job queues.
 #
-# IMPORTANT TLS NOTE: with transit_encryption_enabled the app must connect over TLS
-# using the *real* ElastiCache primary endpoint hostname (for SNI/cert validation).
-# That's why we inject REDIS_HOST as the actual AWS endpoint via Secrets Manager,
-# rather than aliasing it behind a Kubernetes ExternalName service. Confirm your
-# misp-core build supports Redis TLS; if not, either run ElastiCache without transit
-# encryption inside the private subnets, or front Redis with stunnel.
-
-resource "random_password" "redis_auth" {
-  length  = 32
-  special = false # avoid REDIS_PASSWORD escaping pain ($ must be doubled in MISP)
-}
+# TLS NOTE: transit encryption is OFF on purpose. ghcr.io/misp/misp-docker's
+# /entrypoint.sh has no Redis TLS support at all (confirmed against CORE_TAG
+# v2.5.30 — no TLS env var, no stunnel, nothing), so a transit-encrypted
+# ElastiCache endpoint just gets `read error on connection ... Redis->auth()`
+# from every MISP worker (AUTH sent in plaintext to a TLS-only listener). AWS
+# also requires an auth_token to be dropped whenever transit encryption is off,
+# so this relies on the security group (EKS node SG only) instead of a Redis
+# password. Redis stays in private subnets, so that's an acceptable trade for a
+# lab/livestream deployment. Revisit with a newer misp-core build or a stunnel
+# sidecar before using this pattern for real production data.
 
 resource "aws_security_group" "redis" {
   name_prefix = "${var.cluster_name}-redis-"
@@ -59,9 +57,8 @@ resource "aws_elasticache_replication_group" "this" {
   subnet_group_name  = aws_elasticache_subnet_group.this.name
   security_group_ids = [aws_security_group.redis.id]
 
-  transit_encryption_enabled = true
+  transit_encryption_enabled = false
   at_rest_encryption_enabled = true
-  auth_token                 = random_password.redis_auth.result
 
   apply_immediately = true
 }

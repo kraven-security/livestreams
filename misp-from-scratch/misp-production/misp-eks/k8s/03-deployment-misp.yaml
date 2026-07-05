@@ -64,6 +64,13 @@ spec:
           env:
             - name: DISABLE_PRINTING_PLAINTEXT_CREDENTIALS
               value: "true"
+            # ElastiCache runs without transit encryption/auth token (see
+            # terraform/elasticache.tf), so REDIS_PASSWORD is "". Without this,
+            # /entrypoint.sh's ${REDIS_PASSWORD:-redispassword} treats the empty
+            # string as unset and falls back to the literal password
+            # "redispassword", which a passwordless Redis then rejects at AUTH.
+            - name: ENABLE_REDIS_EMPTY_PASSWORD
+              value: "true"
             - name: ENABLE_BACKGROUND_UPDATES
               value: "true"
             - name: PYTHONUNBUFFERED

@@ -5,6 +5,19 @@ hostname at it. This assumes your domain is on Cloudflare — if you issued the 
 cert via [`acm-certificate-setup.md`](acm-certificate-setup.md), this is the same
 zone.
 
+> **Use a single-level hostname** (e.g. `misp.kravensecurity.com` or
+> `misp-lab.kravensecurity.com`) — **not** a nested one like
+> `misp.lab.kravensecurity.com`. Cloudflare's free Universal SSL edge certificate
+> only covers `example.com` + `*.example.com` (one wildcard level). A two-level
+> hostname has no matching edge cert, so Cloudflare's edge fails the TLS handshake
+> before traffic ever reaches AWS — browsers report this as
+> `SSL_ERROR_NO_CYPHER_OVERLAP` (Firefox) or a generic handshake-failure error
+> (Chrome). Confirmed directly against Cloudflare's edge IP: connecting with SNI =
+> a two-level hostname gets an immediate `handshake_failure` alert because
+> Cloudflare has nothing to present for it. Fix is either a single-level hostname
+> (this doc) or turning on **SSL/TLS → Edge Certificates → Total TLS** in
+> Cloudflare, which issues a dedicated cert for deeper subdomains too.
+
 ---
 
 ## Step 1: Get the ALB hostname
@@ -26,8 +39,9 @@ This returns something like
 2. Go to **DNS** → **Records**.
 3. Click **Add record** and configure it as follows:
    * **Type:** `CNAME`
-   * **Name:** the subdomain part of `MISP_HOSTNAME` (e.g. `misp.lab` for
-     `misp.lab.kravensecurity.com` — Cloudflare appends the zone automatically).
+   * **Name:** the subdomain part of `MISP_HOSTNAME` (e.g. `misp-lab` for
+     `misp-lab.kravensecurity.com` — Cloudflare appends the zone automatically).
+     Keep this single-level — see the warning above.
    * **Target:** the ALB hostname from Step 1.
    * **Proxy status:** 🟠 **Proxied (Orange Cloud)**. Unlike the ACM DNS-validation
      record (which must be DNS-only/grey cloud), this is your real traffic record —
@@ -55,9 +69,14 @@ Propagation through Cloudflare is usually near-instant (no waiting like ACM DNS
 validation). Confirm:
 
 ```bash
-dig +short "$MISP_HOSTNAME"
-curl -sI "https://$MISP_HOSTNAME" | head -5
+dig +short "$MISP_HOSTNAME"                       # should return Cloudflare IPs (104.x/172.x/188.x), not an AWS IP
+curl -vI --connect-timeout 10 "https://$MISP_HOSTNAME" 2>&1 | grep -i "subjectAltName\|handshake"
 ```
+
+If you get a TLS handshake failure here (curl: `SSL routines::ssl/tls alert
+handshake failure`, Firefox: `SSL_ERROR_NO_CYPHER_OVERLAP`), it's almost always
+the two-level-hostname edge-cert gap described above, not an AWS/ALB problem —
+confirm by checking `subjectAltName` in the curl output against `$MISP_HOSTNAME`.
 
 Then browse to `https://$MISP_HOSTNAME` — the cert should be valid and you should
 reach the MISP login page. Continue with Phase 3's login step from there.

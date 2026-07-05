@@ -6,7 +6,13 @@ cluster_name    = "misp-prod"
 cluster_version = "1.32"
 
 # DNS + TLS — issue the ACM cert and validate it OFF-AIR (validation is slow).
-misp_hostname       = "misp.lab.kravensecurity.com"
+# If your domain is on Cloudflare, use a SINGLE-LEVEL hostname (e.g. the
+# misp-lab.example.com shown here, or misp.example.com) — NOT a nested one like
+# misp.lab.example.com. Cloudflare's free Universal SSL edge cert only covers
+# example.com + *.example.com (one wildcard level), so a two-level hostname has
+# no matching edge cert and fails the TLS handshake before traffic reaches AWS
+# at all. See docs/dns-cutover-cloudflare.md.
+misp_hostname       = "misp-lab.kravensecurity.com"
 acm_certificate_arn = "arn:aws:acm:eu-west-2:111122223333:certificate/REPLACE-ME"
 
 # Sizing (lab defaults; bump for production)

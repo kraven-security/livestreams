@@ -8,6 +8,13 @@ Before jumping into the steps, there is a **critical architectural rule** to kee
 
 Assuming you are using an AWS Load Balancer or CloudFront in front of your MISP instance, here is the step-by-step guide to creating and validating your ACM certificate.
 
+> **Choosing the hostname:** if you're also proxying real traffic through Cloudflare
+> (orange cloud) — see [`dns-cutover-cloudflare.md`](dns-cutover-cloudflare.md) —
+> pick a **single-level** hostname (e.g. `misp-lab.kravensecurity.com`), not a
+> nested one like `misp.lab.kravensecurity.com`. This is about Cloudflare's own
+> edge certificate coverage, not ACM — but it's easiest to get right by deciding
+> the hostname once, before requesting either certificate.
+
 ---
 
 ## Step 1: Request the Certificate in AWS ACM

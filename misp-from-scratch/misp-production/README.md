@@ -30,23 +30,24 @@ from Secrets Manager via External Secrets, and the ALB terminates TLS with ACM.
 ## Repo layout
 
 ```
-misp-eks/
+misp-production/
 ├── README.md                     ← you are here
+├── architecture.svg
 ├── docs/                         ← supporting runbooks
 │   ├── acm-certificate-setup.md    ← issuing + DNS-validating the ACM cert via Cloudflare
 │   ├── tool-installation.md       ← installing awscli, terraform, kubectl, helm, envsubst, jq
 │   ├── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
 │   └── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
-├── terraform/                    ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
-├── k8s/                          ← adapted MISP manifests (envsubst placeholders)
-│   ├── 00-namespace-rbac.yaml
-│   ├── 01-external-secrets.yaml
-│   ├── 02-services.yaml
-│   ├── 03-deployment-misp.yaml   ← from official deployment-misp.yaml
-│   ├── 04-deployment-nginx.yaml  ← from official deployment-nginx.yaml
-│   ├── 05-ingress.yaml
-│   └── 06-networkpolicy.yaml     ← apply LAST
-└── architecture.svg
+└── misp-eks/
+    ├── terraform/                ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
+    └── k8s/                      ← adapted MISP manifests (envsubst placeholders)
+        ├── 00-namespace-rbac.yaml
+        ├── 01-external-secrets.yaml
+        ├── 02-services.yaml
+        ├── 03-deployment-misp.yaml   ← from official deployment-misp.yaml
+        ├── 04-deployment-nginx.yaml  ← from official deployment-nginx.yaml
+        ├── 05-ingress.yaml
+        └── 06-networkpolicy.yaml     ← apply LAST
 ```
 
 > SIEM integration files (Filebeat / Elastic Agent configs, sync-user script,
@@ -69,7 +70,11 @@ it.
    Validation is slow — never do it live. Note the cert ARN. If your domain is on
    Cloudflare, see [`docs/acm-certificate-setup.md`](docs/acm-certificate-setup.md)
    for the full request + DNS validation walkthrough.
-2. Decide your hostname (e.g. `misp.lab.kravensecurity.com`).
+2. Decide your hostname (e.g. `misp-lab.kravensecurity.com`). If your domain is on
+   Cloudflare, keep it **single-level** — see
+   [`docs/dns-cutover-cloudflare.md`](docs/dns-cutover-cloudflare.md) for why a
+   nested hostname like `misp.lab.kravensecurity.com` breaks TLS at Cloudflare's
+   edge before it ever reaches AWS.
 3. Check service quotas: EIPs, NAT GW, ALBs, EKS nodes, ElastiCache nodes.
 4. (Recommended) Stand up a **break-glass** copy: same Terraform, different
    `cluster_name` + state key, already applied and healthy.
@@ -110,8 +115,8 @@ export MISP_HOSTNAME="$(terraform output -raw misp_hostname)"
 export ACM_CERT_ARN="$(terraform output -raw acm_certificate_arn)"
 export ESO_ROLE_ARN="$(terraform output -raw eso_irsa_role_arn)"
 export VPC_CIDR="10.42.0.0/16"    # match var.vpc_cidr
-export CORE_TAG="v2.5.30"         # pin; check ghcr.io/MISP packages for current
-export MODULES_TAG="v3.0.4"
+export CORE_TAG="v2.5.30"         # pin; do NOT casually bump — see note below
+export MODULES_TAG="v3.0.4"       # keep paired with CORE_TAG
 ```
 
 ---
@@ -263,9 +268,31 @@ logged-in session survives a request served by the other pod (thanks to the pinn
   name and that php-fpm is ready.
 - **DB login error `3098 table does not comply ... external plugin`** → you're on
   MySQL 8, not MariaDB. This stack uses RDS **MariaDB** for that reason.
-- **Redis TLS handshake fails** → ElastiCache transit encryption needs the real
-  endpoint hostname (we inject it as `REDIS_HOST`) and your build must support Redis
-  TLS. If unsupported, drop transit encryption (private subnets only) or front with stunnel.
+- **`misp` pod loops resetting to the same early init log lines every ~2.5 min,
+  never gets past `configure_misp.sh`** → the liveness probe (60s delay + 4×15s)
+  kills the container before first-boot DB schema apply / GnuPG keygen finishes —
+  each restart resets progress. Fixed by the `startupProbe` in
+  `03-deployment-misp.yaml` (up to 10 min grace before liveness/readiness kick in).
+- **Firefox `SSL_ERROR_NO_CYPHER_OVERLAP` / curl `handshake failure` on
+  `$MISP_HOSTNAME`, never reaches the ALB** → almost always a Cloudflare edge-cert
+  gap, not this stack. See
+  [`docs/dns-cutover-cloudflare.md`](docs/dns-cutover-cloudflare.md) — nested
+  hostnames aren't covered by Cloudflare's free wildcard cert.
+- **MISP workers crash-loop with `read error on connection to ... Redis->auth()`**
+  → `misp-core` has no Redis TLS support at all (checked `v2.5.30` and `v2.5.42` —
+  identical, TLS-less `/entrypoint.sh`), so it can't complete `AUTH` against an
+  ElastiCache endpoint with transit encryption on. This stack runs ElastiCache
+  *without* transit encryption/auth token for that reason (`elasticache.tf`) —
+  relying on the security group (EKS node SG only) instead of a Redis password.
+  If you re-enable transit encryption, you'll need a hand-rolled `stunnel` sidecar
+  (`STUNNEL=true` / `STUNNEL_CONFIG=` env vars exist in the image, but there's no
+  ready-made Redis-TLS config).
+- **`ERR AUTH <password> called without any password configured`** → the image's
+  `/entrypoint.sh` does `REDIS_PASSWORD=${REDIS_PASSWORD:-redispassword}`, and
+  shell `:-` treats an *empty string* the same as unset — so `REDIS_PASSWORD=""`
+  silently becomes the literal password `"redispassword"`, which a passwordless
+  Redis then rejects. Set `ENABLE_REDIS_EMPTY_PASSWORD=true` on the `misp`
+  container (already wired in `03-deployment-misp.yaml`) to skip `AUTH` entirely.
 - **External Secret empty / k8s secret missing** → check the `external-secrets-misp`
   SA annotation (IRSA role ARN) and that the role can read both secret ARNs.
 - **Image pull slow/stalls** → pre-pull `misp-core` onto nodes off-air; pin SHAs.
@@ -314,8 +341,20 @@ present — confirm the namespace (and its Ingress) is fully deleted first.
 
 These depend on your exact image build — check them off in rehearsal:
 - [x] nginx entrypoint really targets `misp-php:9002` (hardcoded in
-      `/kubernetes/entrypoint_nginx.sh` — confirmed against `CORE_TAG=v2.5.30`;
-      the php-fpm Service in `02-services.yaml` is named `misp-php` to match)
+      `/kubernetes/entrypoint_nginx.sh` — confirmed on `CORE_TAG=v2.5.30`; the
+      php-fpm Service in `02-services.yaml` is named `misp-php` to match)
+- [x] `misp-core`'s Redis client has no TLS support (confirmed identical, TLS-less
+      `/entrypoint.sh` Redis handling in both `v2.5.30` and `v2.5.42`) — this is why
+      `elasticache.tf` runs ElastiCache without transit encryption/auth token
+- [ ] **Do not casually bump `CORE_TAG` past `v2.5.30`.** Confirmed on `v2.5.42`:
+      upstream replaced `/kubernetes/entrypoint_nginx.sh`'s env-driven,
+      `fastcgi_pass`-hack nginx with a raw `nginx` process configured entirely via
+      a ConfigMap on port **8080** (not 80), and moved `misp-modules` out of the
+      `misp` pod into its own Deployment + Service (`MISP_MODULES_FQDN=http://
+      misp-modules`). Upgrading needs a real rework of `02-`/`03-`/`04-` — a new
+      nginx ConfigMap, split modules Deployment/Service, new container port — not
+      just a tag bump. Diff `kubernetes/manifests/` at
+      github.com/MISP/misp-docker against this repo's `k8s/` before trying again.
 - [ ] nginx serves the app on **:80** when `DISABLE_SSL_REDIRECT=true`
 - [ ] exact HA var names for salt/UUID in your `CORE_TAG` (README HA section lists
       `SALT`/`UUID`; this stack uses `SECURITY_SALT` + `MISP_UUID` — confirm both are honored)
