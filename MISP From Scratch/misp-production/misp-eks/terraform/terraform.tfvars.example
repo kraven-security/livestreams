@@ -1,7 +1,7 @@
 # terraform.tfvars.example
 # Copy to terraform.tfvars and fill in. Do NOT commit terraform.tfvars.
 
-region          = "eu-west-2"
+region          = "eu-west-1"
 cluster_name    = "misp-prod"
 cluster_version = "1.32"
 

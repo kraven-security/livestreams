@@ -32,6 +32,8 @@ from Secrets Manager via External Secrets, and the ALB terminates TLS with ACM.
 ```
 misp-eks-elastic/
 ├── README.md                     ← you are here
+├── docs/                         ← supporting runbooks
+│   └── acm-certificate-setup.md  ← issuing + DNS-validating the ACM cert via Cloudflare
 ├── terraform/                    ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
 ├── k8s/                          ← adapted MISP manifests (envsubst placeholders)
 │   ├── 00-namespace-rbac.yaml
@@ -57,7 +59,9 @@ misp-eks-elastic/
 
 **OFF-AIR (do these before any live demo):**
 1. **Issue + DNS-validate an ACM cert** for your MISP hostname in the cluster region.
-   Validation is slow — never do it live. Note the cert ARN.
+   Validation is slow — never do it live. Note the cert ARN. If your domain is on
+   Cloudflare, see [`docs/acm-certificate-setup.md`](docs/acm-certificate-setup.md)
+   for the full request + DNS validation walkthrough.
 2. Decide your hostname (e.g. `misp.lab.kravensecurity.com`).
 3. Check service quotas: EIPs, NAT GW, ALBs, EKS nodes, ElastiCache nodes.
 4. (Recommended) Stand up a **break-glass** copy: same Terraform, different
