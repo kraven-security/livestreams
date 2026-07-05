@@ -56,6 +56,41 @@ Refresh your AWS ACM console page. The status will update from **Pending validat
 
 ---
 
+## Troubleshooting: CAA error blocking validation
+
+A CAA (Certificate Authority Authorization) record is essentially a security guest list for your domain. It tells the internet exactly which Certificate Authorities (like Amazon, Let's Encrypt, or DigiCert) are allowed to issue SSL certificates for your domain.
+
+If ACM validation stalls or fails with a CAA error, it means you either have an existing CAA record in Cloudflare that explicitly restricts issuance to another provider (like Let's Encrypt), or Cloudflare's default settings are blocking AWS. Amazon sees this restriction, respects it, and safely halts the validation.
+
+To fix this, you just need to put Amazon on the guest list in Cloudflare.
+
+**How to fix the CAA error in Cloudflare:**
+
+1. Log into your **Cloudflare Dashboard** and select `kravensecurity.com`.
+2. Go to **DNS** > **Records**.
+3. Look through your existing records to see if you have any types labeled **CAA**. If you see them (e.g., one allowing `letsencrypt.org`), do not delete them if you are using them for other parts of your site. We will just add AWS alongside them.
+4. Click **Add record** and configure it with these exact settings:
+   * **Type:** `CAA`
+   * **Name:** `@` (This applies it to the root domain and all subdomains, including your MISP project).
+   * **Tag:** Select **Only allow specific CAs to issue certificates (issue)**.
+   * **Value/CA Domain Name:** `amazon.com`
+   * **TTL:** Auto (or 10 minutes).
+5. Click **Save**.
+
+**What to do next:**
+
+Once you save that record, Cloudflare updates its DNS almost instantly.
+
+AWS ACM will automatically retry validation periodically, but it can sometimes take a few hours for AWS to trigger a re-check on its own. To speed things up and bypass the wait:
+
+1. Go back to AWS ACM.
+2. Delete the pending certificate that failed.
+3. Click **Request a new one** exactly like you did before.
+
+Because the CAA record is now live in Cloudflare, AWS will check the domain, see `amazon.com` on the approved list, read your validation CNAME, and issue your certificate within minutes.
+
+---
+
 ## Step 5: Connecting Your Main Traffic (Optional Tip)
 
 Once the certificate is **Issued**, you can attach it to your AWS Application Load Balancer's HTTPS listener (Port 443).
