@@ -39,6 +39,7 @@ misp-production/
 │   ├── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
 │   └── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
 └── misp-eks/
+    ├── Makefile                  ← `make up` / `make netpol` / `make down` — see Phase 1/2, Teardown
     ├── terraform/                ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
     └── k8s/                      ← adapted MISP manifests (envsubst placeholders)
         ├── 00-namespace-rbac.yaml
@@ -79,12 +80,23 @@ it.
 4. (Recommended) Stand up a **break-glass** copy: same Terraform, different
    `cluster_name` + state key, already applied and healthy.
 
-> **Cost warning:** EKS + NAT + RDS + ElastiCache + ALB cost real money per hour.
-> Run `terraform destroy` when done (see Teardown).
+> **Cost warning:** left running 24/7 this stack costs roughly $390-400/month
+> (EKS control plane, a 2-node node group, NAT gateway, RDS, ElastiCache, ALB) —
+> for something that's only live a few hours around each stream. **Destroy it
+> between sessions**: `make down` (see Teardown), then `make up` before the next
+> one (~25-35 min end-to-end including MISP's own first-boot). This is by far the
+> biggest cost lever available — scaling the node group to 0 instead only removes
+> ~40-45% of the idle bill, since RDS/ElastiCache/the EKS control plane/NAT all
+> keep billing regardless of node count.
 
 ---
 
 ## Phase 1 — EKS foundation with Terraform
+
+> Once `terraform.tfvars` is filled in, Phases 1-2 below can be run as a single
+> `make up` from `misp-eks/` (see the Makefile) instead of the manual steps —
+> the manual walkthrough is still worth reading once to understand what's
+> happening, especially the first time.
 
 ```bash
 cd terraform
@@ -97,11 +109,13 @@ terraform plan -out tfplan        # review off-air; save the plan
 terraform apply tfplan            # ~15–20 min (EKS + RDS + Redis)
 ```
 
-This creates: VPC (3 AZ), EKS + managed node group, AWS Load Balancer Controller,
-External Secrets Operator, the EBS CSI driver addon (with its own IRSA role —
-`irsa-ebs-csi.tf`), RDS MariaDB, ElastiCache Redis (TLS), S3 attachments bucket +
-scoped IAM keys, and the two Secrets Manager secrets (with the AWS endpoints and
-generated MISP crypto material baked in).
+This creates: VPC (3 AZ) with a free S3 gateway endpoint (`vpc-endpoints.tf` —
+keeps attachment/image-pull traffic off the NAT gateway's per-GB charge), EKS +
+managed node group, AWS Load Balancer Controller, External Secrets Operator, the
+EBS CSI driver addon (with its own IRSA role — `irsa-ebs-csi.tf`), RDS MariaDB,
+ElastiCache Redis, S3 attachments bucket + scoped IAM keys, and the two
+Secrets Manager secrets (with the AWS endpoints and generated MISP crypto
+material baked in).
 
 Point `kubectl` at the cluster and capture outputs:
 
@@ -218,6 +232,8 @@ and the crypto material in Secrets Manager separately.
 render 06-networkpolicy.yaml
 # Re-test login + a feed pull afterwards to confirm nothing is wrongly blocked.
 ```
+Or `make netpol` from `misp-eks/` — deliberately a separate command from
+`make up`, not bundled into it, so you always confirm health first.
 
 ---
 
@@ -324,6 +340,12 @@ logged-in session survives a request served by the other pod (thanks to the pinn
 ## Teardown
 
 ```bash
+make down     # from misp-eks/ — wraps the steps below
+```
+
+Or manually, if you'd rather not use `make`:
+
+```bash
 # Remove k8s first so the ALB/ENIs are released before VPC destroy
 kubectl delete -f <(envsubst < k8s/06-networkpolicy.yaml) || true
 kubectl delete namespace "$NAMESPACE" || true
@@ -334,6 +356,8 @@ terraform destroy
 
 If `destroy` hangs on the VPC, an ALB/ENI from the Ingress is usually still
 present — confirm the namespace (and its Ingress) is fully deleted first.
+
+Do this **between every demo session** — see the Cost warning above.
 
 ---
 

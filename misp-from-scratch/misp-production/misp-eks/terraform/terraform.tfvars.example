@@ -15,9 +15,15 @@ cluster_version = "1.32"
 misp_hostname       = "misp-lab.kravensecurity.com"
 acm_certificate_arn = "arn:aws:acm:eu-west-2:111122223333:certificate/REPLACE-ME"
 
-# Sizing (lab defaults; bump for production)
+# Sizing (lab defaults; bump for production). Right-sized for a livestream demo
+# that's destroyed between sessions (see README Cost warning / `make down`) —
+# not meant to carry production headroom.
 node_instance_types = ["m5.large"]
 node_desired        = 2
-db_instance_class   = "db.t3.medium"
-db_multi_az         = false
-redis_node_type     = "cache.t3.medium"
+node_min            = 1  # no pod anti-affinity/topology spread in k8s/, safe to float to 1
+node_max            = 3  # caps burst cost; steady state is unaffected
+
+db_instance_class    = "db.t3.small"
+db_multi_az          = false
+db_allocated_storage = 20             # storage can only grow later, not shrink
+redis_node_type      = "cache.t3.small"
