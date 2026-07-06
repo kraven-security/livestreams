@@ -52,7 +52,8 @@ misp-production/
 │   ├── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
 │   ├── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
 │   ├── dns-cutover-route53.md     ← pointing MISP_HOSTNAME at the ALB via Route 53
-│   └── production-hardening-checklist.md ← 47-point production-readiness walkthrough
+│   ├── production-hardening-checklist.md   ← 47-point production-readiness walkthrough
+│   └── production-hardening-checklist.html ← same checklist, self-contained branded page (open in a browser)
 └── misp-eks/
     ├── Makefile                  ← `make up` / `make netpol` / `make down` — see Phase 1/2, Teardown
     ├── terraform/                ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
@@ -279,7 +280,7 @@ If you get a redirect loop or CSRF error here, see **Troubleshooting → behind-
 This is the checklist applied. Walk these live. For the full production-readiness
 walkthrough — MISP application settings plus infra hardening, marked by what this
 stack already wires vs. what you configure — see
-[`docs/production-hardening-checklist.md`](docs/production-hardening-checklist.md).
+[`docs/production-hardening-checklist.md`](docs/production-hardening-checklist.md) (markdown) or [`docs/production-hardening-checklist.html`](docs/production-hardening-checklist.html) (html).
 
 **Behind-ALB correctness (already wired):** on `CORE_TAG>=v2.5.42`, nginx serves
 plain HTTP on :8080 only (no SSL redirect logic exists to disable) and trusts the
@@ -362,7 +363,29 @@ logged-in session survives a request served by the other pod (thanks to the pinn
 
 ---
 
-## Troubleshooting (the on-air gotchas, with fixes)
+## Teardown
+
+```bash
+make down     # from misp-eks/ — wraps the steps below
+```
+
+Or manually, if you'd rather not use `make`:
+
+```bash
+# Remove k8s first so the ALB/ENIs are released before VPC destroy
+kubectl delete -f <(envsubst < k8s/06-networkpolicy.yaml) || true
+kubectl delete namespace "$NAMESPACE" || true
+
+cd terraform
+terraform destroy
+```
+
+If `destroy` hangs on the VPC, an ALB/ENI from the Ingress is usually still
+present — confirm the namespace (and its Ingress) is fully deleted first.
+
+---
+
+## Troubleshooting (the gotchas, with fixes)
 
 - **Redirect loop / CSRF behind ALB** → on `CORE_TAG>=v2.5.42`, confirm
   `04b-nginx-configmap.yaml`'s `server` block still has `real_ip_header
@@ -474,73 +497,7 @@ logged-in session survives a request served by the other pod (thanks to the pinn
   `helm -n external-secrets uninstall external-secrets` and re-run
   `terraform apply` — by then the webhook is up and it succeeds immediately.
 
----
-
-## Teardown
-
-```bash
-make down     # from misp-eks/ — wraps the steps below
-```
-
-Or manually, if you'd rather not use `make`:
-
-```bash
-# Remove k8s first so the ALB/ENIs are released before VPC destroy
-kubectl delete -f <(envsubst < k8s/06-networkpolicy.yaml) || true
-kubectl delete namespace "$NAMESPACE" || true
-
-cd terraform
-terraform destroy
-```
-
-If `destroy` hangs on the VPC, an ALB/ENI from the Ingress is usually still
-present — confirm the namespace (and its Ingress) is fully deleted first.
-
-Do this **between every demo session** — see the Cost warning above.
-
----
-
-## Verify-before-air (build-specific items to confirm in a dry run)
-
-These depend on your exact image build — check them off in rehearsal:
-- [x] nginx really targets `misp-php:9002` for FastCGI — on `CORE_TAG>=v2.5.42`
-      this is baked into our own `04b-nginx-configmap.yaml`; on older tags it was
-      hardcoded in the official image's `/kubernetes/entrypoint_nginx.sh` instead.
-      Either way the php-fpm Service in `02-services.yaml` must be named `misp-php`
-      to match.
-- [x] `misp-core`'s Redis client has no TLS support (confirmed identical, TLS-less
-      `/entrypoint.sh` Redis handling in both `v2.5.30` and `v2.5.42`) — this is why
-      `elasticache.tf` runs ElastiCache without transit encryption/auth token
-- [x] **`CORE_TAG=v2.5.42` is supported** — this repo's `k8s/` has done the rework
-      upstream needed: `03b-deployment-misp-modules.yaml` (split `misp-modules`
-      Deployment/Service, previously a same-pod sidecar) and
-      `04b-nginx-configmap.yaml` (nginx now runs the stock binary directly,
-      configured entirely via ConfigMap, serving plain HTTP on **:8080** — no more
-      env-var-driven entrypoint script, no more `DISABLE_SSL_REDIRECT`/
-      `NGINX_X_FORWARDED_FOR`/`NGINX_SET_REAL_IP_FROM`; the ALB-trust directives
-      those used to set are hand-added directly into the ConfigMap instead).
-      Validated end-to-end live: pods healthy, `HTTP 200` through the real
-      hostname, background workers processing jobs. If bumping further past
-      `v2.5.42`, diff `kubernetes/manifests/` at github.com/MISP/misp-docker
-      against this repo's `k8s/` first — don't assume this rework still covers a
-      newer release unchanged.
-- [ ] exact HA var names for salt/UUID in your `CORE_TAG` (README HA section lists
-      `SALT`/`UUID`; this stack uses `SECURITY_SALT` + `MISP_UUID` — confirm both are honored)
-- [ ] MISP S3 attachment storage works with the scoped IAM **keys** (IRSA may not
-      cover MISP's S3 client)
-
----
-
-## Maps to the livestream
-
-| Phase here | Stream segment |
-|---|---|
-| 1 | Segment A — EKS via Terraform |
-| 2–3 | Segment B — MISP on k8s |
-| 4 | Segment C — Production hardening |
-| 5 | Segment D — Validate the deployment |
-
----
+--- 
 
 ## License
 
