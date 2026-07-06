@@ -351,6 +351,22 @@ logged-in session survives a request served by the other pod (thanks to the pinn
   Terraform's state doesn't know about (check `helm list -A --all` for a `failed`
   release). Clean it up with `helm -n <namespace> uninstall <release>`, then re-plan
   and apply.
+- **`external-secrets` Helm release fails on a fresh `make up`/`terraform apply`
+  with `failed calling webhook "mservice.elbv2.k8s.aws" ... no endpoints available
+  for service "aws-load-balancer-webhook-service"`** → a startup race, not a real
+  config problem: Terraform creates the `aws_load_balancer_controller` and
+  `external_secrets` Helm releases from the same `eks_blueprints_addons` module
+  call with no ordering between them (confirmed — the vendored module has no
+  `depends_on` linking them), and the ALB controller's `helm_release` doesn't
+  `wait` for its pods by default, so `external-secrets` can try to create its
+  Service before the ALB controller's admission webhook is actually up to
+  approve it. This is expected on **every** fresh cluster create now that
+  destroy-between-sessions (`make down`/`make up`) is the default workflow — not
+  a one-off. Fix: confirm the ALB controller is `Running` with webhook endpoints
+  (`kubectl -n kube-system get pods -l app.kubernetes.io/name=aws-load-balancer-controller`,
+  `kubectl -n kube-system get endpoints aws-load-balancer-webhook-service`), then
+  `helm -n external-secrets uninstall external-secrets` and re-run
+  `terraform apply` — by then the webhook is up and it succeeds immediately.
 
 ---
 

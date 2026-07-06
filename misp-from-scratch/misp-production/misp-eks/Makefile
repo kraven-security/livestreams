@@ -27,8 +27,29 @@ up:
 	cd terraform
 	terraform init
 	terraform plan -out tfplan
-	terraform apply tfplan
+	APPLY_FAILED=0
+	terraform apply tfplan || APPLY_FAILED=1
 	eval "$$(terraform output -raw configure_kubectl)"
+	if [ "$$APPLY_FAILED" = "1" ]; then
+	  echo "terraform apply failed — checking for a known startup race: on a fresh" >&2
+	  echo "cluster, external-secrets (or another addon)'s Helm release can try to" >&2
+	  echo "create a Service before the aws-load-balancer-controller's admission" >&2
+	  echo "webhook is actually up, since that controller's own helm_release doesn't" >&2
+	  echo "wait for its pods by default (see README Troubleshooting)." >&2
+	  FAILED_RELEASES="$$(helm list -A --all -o json 2>/dev/null | jq -r '.[] | select(.status=="failed") | "\(.namespace) \(.name)"')"
+	  if [ -z "$$FAILED_RELEASES" ]; then
+	    echo "No failed Helm release found, so this isn't that known race — not" >&2
+	    echo "retrying automatically. Investigate the error above and re-run make up." >&2
+	    exit 1
+	  fi
+	  echo "Found failed release(s), which is consistent with the race. Clearing" >&2
+	  echo "them and retrying once (by now the webhook should be up):" >&2
+	  echo "$$FAILED_RELEASES" >&2
+	  echo "$$FAILED_RELEASES" | while read -r ns name; do
+	    [ -n "$$name" ] && helm -n "$$ns" uninstall "$$name"
+	  done
+	  terraform apply -auto-approve
+	fi
 	export REGION="$$(terraform output -raw region)"
 	export NAMESPACE="$(NAMESPACE)"
 	export MISP_HOSTNAME="$$(terraform output -raw misp_hostname)"
