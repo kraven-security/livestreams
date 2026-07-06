@@ -39,6 +39,7 @@ misp-production/
 │   ├── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
 │   └── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
 └── misp-eks/
+    ├── Makefile                  ← `make up` / `make netpol` / `make down` — see Phase 1/2, Teardown
     ├── terraform/                ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
     └── k8s/                      ← adapted MISP manifests (envsubst placeholders)
         ├── 00-namespace-rbac.yaml
@@ -79,8 +80,36 @@ it.
 4. (Recommended) Stand up a **break-glass** copy: same Terraform, different
    `cluster_name` + state key, already applied and healthy.
 
-> **Cost warning:** EKS + NAT + RDS + ElastiCache + ALB cost real money per hour.
-> Run `terraform destroy` when done (see Teardown).
+> **Cost warning:** left running 24/7 this stack costs roughly $390-400/month
+> (EKS control plane, a 2-node node group, NAT gateway, RDS, ElastiCache, ALB) —
+> for something that's only live a few hours around each stream. **Destroy it
+> between sessions**: `make down` (see Teardown), then `make up` before the next
+> one (~25-35 min end-to-end including MISP's own first-boot). This is by far the
+> biggest cost lever available — scaling the node group to 0 instead only removes
+> ~40-45% of the idle bill, since RDS/ElastiCache/the EKS control plane/NAT all
+> keep billing regardless of node count.
+
+---
+
+## Quick start (`make`)
+
+Once `terraform.tfvars` is filled in and `AWS_PROFILE` is exported (see
+Prerequisites above), the whole thing boils down to three commands from
+`misp-eks/`:
+
+| Command | What it does |
+|---|---|
+| `make up` | Terraform (VPC/EKS/RDS/ElastiCache/S3) **+** renders and applies the k8s manifests through the Ingress (Phases 1-2). Does **not** apply NetworkPolicies. |
+| `make netpol` | Applies `06-networkpolicy.yaml` (Phase 4) — run only after confirming login + a feed pull work. Kept separate from `make up` on purpose: a misconfigured policy looks identical to a broken deployment, so you always want to be confirming health with policies off first. |
+| `make down` | Full teardown: deletes the NetworkPolicy + namespace, then `terraform destroy`. Run this **between every demo session** — see the Cost warning above. |
+
+Override defaults on the command line, e.g. `make up CORE_TAG=v2.5.42`.
+Variables: `NAMESPACE` (default `misp`), `VPC_CIDR` (default `10.42.0.0/16`),
+`CORE_TAG` (default `v2.5.30`), `MODULES_TAG` (default `v3.0.4`).
+
+`make up`/`make netpol`/`make down` are just wrappers around the exact manual
+steps in Phases 1-5 below — worth reading through once, especially the first
+time, to understand what's actually happening at each step.
 
 ---
 
@@ -97,11 +126,13 @@ terraform plan -out tfplan        # review off-air; save the plan
 terraform apply tfplan            # ~15–20 min (EKS + RDS + Redis)
 ```
 
-This creates: VPC (3 AZ), EKS + managed node group, AWS Load Balancer Controller,
-External Secrets Operator, the EBS CSI driver addon (with its own IRSA role —
-`irsa-ebs-csi.tf`), RDS MariaDB, ElastiCache Redis (TLS), S3 attachments bucket +
-scoped IAM keys, and the two Secrets Manager secrets (with the AWS endpoints and
-generated MISP crypto material baked in).
+This creates: VPC (3 AZ) with a free S3 gateway endpoint (`vpc-endpoints.tf` —
+keeps attachment/image-pull traffic off the NAT gateway's per-GB charge), EKS +
+managed node group, AWS Load Balancer Controller, External Secrets Operator, the
+EBS CSI driver addon (with its own IRSA role — `irsa-ebs-csi.tf`), RDS MariaDB,
+ElastiCache Redis, S3 attachments bucket + scoped IAM keys, and the two
+Secrets Manager secrets (with the AWS endpoints and generated MISP crypto
+material baked in).
 
 Point `kubectl` at the cluster and capture outputs:
 
@@ -218,6 +249,8 @@ and the crypto material in Secrets Manager separately.
 render 06-networkpolicy.yaml
 # Re-test login + a feed pull afterwards to confirm nothing is wrongly blocked.
 ```
+Or `make netpol` from `misp-eks/` — deliberately a separate command from
+`make up`, not bundled into it, so you always confirm health first.
 
 ---
 
@@ -318,10 +351,32 @@ logged-in session survives a request served by the other pod (thanks to the pinn
   Terraform's state doesn't know about (check `helm list -A --all` for a `failed`
   release). Clean it up with `helm -n <namespace> uninstall <release>`, then re-plan
   and apply.
+- **`external-secrets` Helm release fails on a fresh `make up`/`terraform apply`
+  with `failed calling webhook "mservice.elbv2.k8s.aws" ... no endpoints available
+  for service "aws-load-balancer-webhook-service"`** → a startup race, not a real
+  config problem: Terraform creates the `aws_load_balancer_controller` and
+  `external_secrets` Helm releases from the same `eks_blueprints_addons` module
+  call with no ordering between them (confirmed — the vendored module has no
+  `depends_on` linking them), and the ALB controller's `helm_release` doesn't
+  `wait` for its pods by default, so `external-secrets` can try to create its
+  Service before the ALB controller's admission webhook is actually up to
+  approve it. This is expected on **every** fresh cluster create now that
+  destroy-between-sessions (`make down`/`make up`) is the default workflow — not
+  a one-off. Fix: confirm the ALB controller is `Running` with webhook endpoints
+  (`kubectl -n kube-system get pods -l app.kubernetes.io/name=aws-load-balancer-controller`,
+  `kubectl -n kube-system get endpoints aws-load-balancer-webhook-service`), then
+  `helm -n external-secrets uninstall external-secrets` and re-run
+  `terraform apply` — by then the webhook is up and it succeeds immediately.
 
 ---
 
 ## Teardown
+
+```bash
+make down     # from misp-eks/ — wraps the steps below
+```
+
+Or manually, if you'd rather not use `make`:
 
 ```bash
 # Remove k8s first so the ALB/ENIs are released before VPC destroy
@@ -334,6 +389,8 @@ terraform destroy
 
 If `destroy` hangs on the VPC, an ALB/ENI from the Ingress is usually still
 present — confirm the namespace (and its Ingress) is fully deleted first.
+
+Do this **between every demo session** — see the Cost warning above.
 
 ---
 
