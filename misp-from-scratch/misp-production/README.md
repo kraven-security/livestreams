@@ -51,7 +51,8 @@ misp-production/
 │   ├── tool-installation.md       ← installing awscli, terraform, kubectl, helm, envsubst, jq
 │   ├── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
 │   ├── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
-│   └── dns-cutover-route53.md     ← pointing MISP_HOSTNAME at the ALB via Route 53
+│   ├── dns-cutover-route53.md     ← pointing MISP_HOSTNAME at the ALB via Route 53
+│   └── production-hardening-checklist.md ← 47-point production-readiness walkthrough
 └── misp-eks/
     ├── Makefile                  ← `make up` / `make netpol` / `make down` — see Phase 1/2, Teardown
     ├── terraform/                ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
@@ -275,7 +276,10 @@ If you get a redirect loop or CSRF error here, see **Troubleshooting → behind-
 
 ## Phase 4 — Production hardening pass
 
-This is the checklist applied. Walk these live.
+This is the checklist applied. Walk these live. For the full production-readiness
+walkthrough — MISP application settings plus infra hardening, marked by what this
+stack already wires vs. what you configure — see
+[`docs/production-hardening-checklist.md`](docs/production-hardening-checklist.md).
 
 **Behind-ALB correctness (already wired):** on `CORE_TAG>=v2.5.42`, nginx serves
 plain HTTP on :8080 only (no SSL redirect logic exists to disable) and trusts the
