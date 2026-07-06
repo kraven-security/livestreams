@@ -59,7 +59,24 @@ up:
 	export CORE_TAG="$(CORE_TAG)"
 	export MODULES_TAG="$(MODULES_TAG)"
 	cd ../k8s
-	render() { envsubst < "$$1" | kubectl apply -f - ; }
+	# Retries on failure: freshly-installed webhook-backed addons (external-secrets,
+	# aws-load-balancer-controller) can take a few seconds to become Ready after
+	# Terraform's Helm release "completes" (those releases don't wait for pods by
+	# default), so an immediate kubectl apply against their admission webhooks can
+	# hit "no endpoints available for service ..." — same underlying race as the
+	# terraform apply retry above, just one step later. Give it up to a minute.
+	render() {
+	  local f="$$1" n=0 max=12
+	  until envsubst < "$$f" | kubectl apply -f - ; do
+	    n=$$((n + 1))
+	    if [ "$$n" -ge "$$max" ]; then
+	      echo "render($$f) still failing after $$max attempts — giving up." >&2
+	      return 1
+	    fi
+	    echo "render($$f) failed (attempt $$n/$$max), likely a webhook not ready yet — retrying in 5s..." >&2
+	    sleep 5
+	  done
+	}
 	render 00-namespace-rbac.yaml
 	render 01-external-secrets.yaml
 	kubectl -n "$$NAMESPACE" get externalsecret
