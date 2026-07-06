@@ -83,6 +83,14 @@ up:
 	kubectl -n "$$NAMESPACE" get secret mysql-credentials instance-secrets
 	render 02-services.yaml
 	render 03-deployment-misp.yaml
+	render 03b-deployment-misp-modules.yaml
+	# 04b contains nginx's own dollar-prefixed variables (uri, is_args, etc.) —
+	# plain envsubst (no shell-format list) blanks those out since they aren't
+	# real shell env vars, corrupting the config silently. Restrict substitution
+	# to just what we want, and apply this BEFORE the nginx Deployment so its
+	# ConfigMap mount doesn't race/stick in ContainerCreating waiting on a
+	# ConfigMap that doesn't exist yet.
+	envsubst '$${NAMESPACE} $${VPC_CIDR}' < 04b-nginx-configmap.yaml | kubectl apply -f -
 	render 04-deployment-nginx.yaml
 	render 05-ingress.yaml
 	echo "Applied through Ingress. Watch rollout: kubectl -n $$NAMESPACE get pods -w"
