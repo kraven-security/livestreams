@@ -91,12 +91,29 @@ it.
 
 ---
 
-## Phase 1 — EKS foundation with Terraform
+## Quick start (`make`)
 
-> Once `terraform.tfvars` is filled in, Phases 1-2 below can be run as a single
-> `make up` from `misp-eks/` (see the Makefile) instead of the manual steps —
-> the manual walkthrough is still worth reading once to understand what's
-> happening, especially the first time.
+Once `terraform.tfvars` is filled in and `AWS_PROFILE` is exported (see
+Prerequisites above), the whole thing boils down to three commands from
+`misp-eks/`:
+
+| Command | What it does |
+|---|---|
+| `make up` | Terraform (VPC/EKS/RDS/ElastiCache/S3) **+** renders and applies the k8s manifests through the Ingress (Phases 1-2). Does **not** apply NetworkPolicies. |
+| `make netpol` | Applies `06-networkpolicy.yaml` (Phase 4) — run only after confirming login + a feed pull work. Kept separate from `make up` on purpose: a misconfigured policy looks identical to a broken deployment, so you always want to be confirming health with policies off first. |
+| `make down` | Full teardown: deletes the NetworkPolicy + namespace, then `terraform destroy`. Run this **between every demo session** — see the Cost warning above. |
+
+Override defaults on the command line, e.g. `make up CORE_TAG=v2.5.42`.
+Variables: `NAMESPACE` (default `misp`), `VPC_CIDR` (default `10.42.0.0/16`),
+`CORE_TAG` (default `v2.5.30`), `MODULES_TAG` (default `v3.0.4`).
+
+`make up`/`make netpol`/`make down` are just wrappers around the exact manual
+steps in Phases 1-5 below — worth reading through once, especially the first
+time, to understand what's actually happening at each step.
+
+---
+
+## Phase 1 — EKS foundation with Terraform
 
 ```bash
 cd terraform
