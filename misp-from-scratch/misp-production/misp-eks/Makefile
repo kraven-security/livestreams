@@ -17,8 +17,8 @@ SHELL := /bin/bash
 
 NAMESPACE   ?= misp
 VPC_CIDR    ?= 10.42.0.0/16
-CORE_TAG    ?= v2.5.30
-MODULES_TAG ?= v3.0.4
+CORE_TAG    ?= v2.5.42
+MODULES_TAG ?= v3.0.8
 
 .PHONY: up netpol down
 
