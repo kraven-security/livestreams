@@ -18,6 +18,15 @@ zone.
 > (this doc) or turning on **SSL/TLS → Edge Certificates → Total TLS** in
 > Cloudflare, which issues a dedicated cert for deeper subdomains too.
 
+> **Do this again after every `make down` + `make up` cycle.** The ALB gets a
+> brand-new hostname (a fresh random suffix) every time the Ingress is recreated
+> from scratch — the old CNAME target stops resolving the moment the previous
+> ALB is destroyed. If the site suddenly returns a Cloudflare **530** (origin
+> unreachable) after a fresh deploy, this is almost always why: the CNAME is
+> still pointing at the old, now-gone ALB. Get the new hostname (Step 1) and
+> update the *existing* record's target (Step 2) — no need to delete/recreate
+> the record itself.
+
 ---
 
 ## Step 1: Get the ALB hostname
@@ -58,8 +67,10 @@ This returns something like
 
 The ALB already terminates TLS with your ACM cert, so Cloudflare needs to connect
 to it over HTTPS. "Flexible" mode would have Cloudflare talk to the ALB over plain
-HTTP, which — combined with `DISABLE_SSL_REDIRECT=true` on nginx — can reintroduce
-the redirect-loop/CSRF problems this stack already works around.
+HTTP, which can reintroduce the redirect-loop/CSRF problems this stack already
+works around (nginx trusts the ALB's forwarded scheme/IP — see the main
+README's "Behind-ALB correctness" section — and that trust assumes the ALB is
+genuinely the one talking to it over HTTPS).
 
 ---
 

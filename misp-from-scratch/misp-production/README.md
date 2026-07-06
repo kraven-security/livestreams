@@ -21,9 +21,13 @@ then harden it and validate the deployment end to end.
 
 ![MISP on AWS EKS production architecture](architecture.svg)
 
-A production-shaped MISP: the web tier (nginx + php-fpm) and modules run in EKS, all
-state is externalized to AWS managed services (RDS, ElastiCache, S3), secrets flow
-from Secrets Manager via External Secrets, and the ALB terminates TLS with ACM.
+A production-shaped MISP: the web tier (nginx + php-fpm) and `misp-modules` run in
+EKS as separate Deployments (as of `CORE_TAG>=v2.5.42` — `misp-modules` was
+previously a same-pod sidecar), all state is externalized to AWS managed services
+(RDS, ElastiCache, S3), secrets flow from Secrets Manager via External Secrets, and
+the ALB terminates TLS with ACM. nginx runs the stock binary directly, configured
+entirely by a ConfigMap (`04b-nginx-configmap.yaml`) rather than a custom
+entrypoint script.
 
 ---
 
@@ -45,10 +49,12 @@ misp-production/
         ├── 00-namespace-rbac.yaml
         ├── 01-external-secrets.yaml
         ├── 02-services.yaml
-        ├── 03-deployment-misp.yaml   ← from official deployment-misp.yaml
-        ├── 04-deployment-nginx.yaml  ← from official deployment-nginx.yaml
+        ├── 03-deployment-misp.yaml          ← from official deployment-misp.yaml
+        ├── 03b-deployment-misp-modules.yaml ← misp-modules, its own Deployment as of CORE_TAG>=v2.5.42
+        ├── 04-deployment-nginx.yaml         ← from official deployment-nginx.yaml
+        ├── 04b-nginx-configmap.yaml         ← nginx.conf ConfigMap (CORE_TAG>=v2.5.42) — special envsubst, see Phase 2
         ├── 05-ingress.yaml
-        └── 06-networkpolicy.yaml     ← apply LAST
+        └── 06-networkpolicy.yaml            ← apply LAST
 ```
 
 > SIEM integration files (Filebeat / Elastic Agent configs, sync-user script,
@@ -103,9 +109,9 @@ Prerequisites above), the whole thing boils down to three commands from
 | `make netpol` | Applies `06-networkpolicy.yaml` (Phase 4) — run only after confirming login + a feed pull work. Kept separate from `make up` on purpose: a misconfigured policy looks identical to a broken deployment, so you always want to be confirming health with policies off first. |
 | `make down` | Full teardown: deletes the NetworkPolicy + namespace, then `terraform destroy`. Run this **between every demo session** — see the Cost warning above. |
 
-Override defaults on the command line, e.g. `make up CORE_TAG=v2.5.42`.
+Override defaults on the command line, e.g. `make up CORE_TAG=v2.5.30`.
 Variables: `NAMESPACE` (default `misp`), `VPC_CIDR` (default `10.42.0.0/16`),
-`CORE_TAG` (default `v2.5.30`), `MODULES_TAG` (default `v3.0.4`).
+`CORE_TAG` (default `v2.5.42`), `MODULES_TAG` (default `v3.0.8`).
 
 `make up`/`make netpol`/`make down` are just wrappers around the exact manual
 steps in Phases 1-5 below — worth reading through once, especially the first
@@ -146,8 +152,8 @@ export MISP_HOSTNAME="$(terraform output -raw misp_hostname)"
 export ACM_CERT_ARN="$(terraform output -raw acm_certificate_arn)"
 export ESO_ROLE_ARN="$(terraform output -raw eso_irsa_role_arn)"
 export VPC_CIDR="10.42.0.0/16"    # match var.vpc_cidr
-export CORE_TAG="v2.5.30"         # pin; do NOT casually bump — see note below
-export MODULES_TAG="v3.0.4"       # keep paired with CORE_TAG
+export CORE_TAG="v2.5.42"         # pin; check github.com/MISP/misp-docker/blob/master/template.env for current
+export MODULES_TAG="v3.0.8"       # keep paired with CORE_TAG per upstream's template.env
 ```
 
 ---
@@ -171,6 +177,15 @@ kubectl -n "$NAMESPACE" get secret mysql-credentials instance-secrets
 
 render 02-services.yaml
 render 03-deployment-misp.yaml
+render 03b-deployment-misp-modules.yaml   # misp-modules is its own Deployment as of v2.5.42
+
+# 04b contains nginx's own $uri/$is_args/etc. placeholders. Plain envsubst (no
+# shell-format list) blanks those out too, since they aren't real shell env vars —
+# that corrupts nginx.conf silently, not loudly. Restrict substitution to just
+# what we actually want, and apply it BEFORE the nginx Deployment so its
+# ConfigMap mount doesn't stick in ContainerCreating waiting on a ConfigMap that
+# doesn't exist yet:
+envsubst '${NAMESPACE} ${VPC_CIDR}' < 04b-nginx-configmap.yaml | kubectl apply -f -
 render 04-deployment-nginx.yaml
 render 05-ingress.yaml
 
@@ -180,7 +195,10 @@ kubectl -n "$NAMESPACE" get pods -w
 
 What to expect: the `misp` pod runs the k8s php-fpm entrypoint (DB schema applied
 offline, permissions enforced, `configure_misp.sh` run), readiness goes green on
-:9002 after ~15s+. `misp-nginx` pods go ready on :80. The Ingress provisions an ALB.
+:9002 after ~15s+. `misp-modules` goes ready on :6666 (its own pod, reached by
+`misp` at `MISP_MODULES_FQDN=http://misp-modules`). `misp-nginx` pods run stock
+nginx on :8080 internally (the `misp-nginx` Service still exposes :80 externally
+— nothing else needs to change). The Ingress provisions an ALB.
 
 Get the ALB hostname:
 
@@ -213,9 +231,14 @@ If you get a redirect loop or CSRF error here, see **Troubleshooting → behind-
 
 This is the checklist applied. Walk these live.
 
-**Behind-ALB correctness (already wired):** `DISABLE_SSL_REDIRECT=true`,
-`NGINX_X_FORWARDED_FOR=true`, `NGINX_SET_REAL_IP_FROM=$VPC_CIDR`, and
-`BASE_URL=https://$MISP_HOSTNAME`. Demo what breaks if you remove them.
+**Behind-ALB correctness (already wired):** on `CORE_TAG>=v2.5.42`, nginx serves
+plain HTTP on :8080 only (no SSL redirect logic exists to disable) and trusts the
+ALB's forwarded IP/scheme via `real_ip_header`/`set_real_ip_from ${VPC_CIDR}`
+hand-added directly into `04b-nginx-configmap.yaml`'s `server` block — plus
+`BASE_URL=https://$MISP_HOSTNAME` from `instance-secrets`. (On older tags, this
+was the `DISABLE_SSL_REDIRECT`/`NGINX_X_FORWARDED_FOR`/`NGINX_SET_REAL_IP_FROM`
+env vars instead.) Demo what breaks if you remove the ConfigMap's
+`real_ip_header`/`set_real_ip_from` lines.
 
 **Scaling the web tier (sessions/salt):**
 - `misp-nginx` is a stateless proxy — already `replicas: 2`.
@@ -291,14 +314,38 @@ logged-in session survives a request served by the other pod (thanks to the pinn
 
 ## Troubleshooting (the on-air gotchas, with fixes)
 
-- **Redirect loop / CSRF behind ALB** → confirm `DISABLE_SSL_REDIRECT=true` on nginx,
-  `NGINX_X_FORWARDED_FOR=true`, `NGINX_SET_REAL_IP_FROM=$VPC_CIDR`, and
-  `BASE_URL=https://$MISP_HOSTNAME`. Pin `ENCRYPTION_KEY`/`SECURITY_SALT` across replicas.
+- **Redirect loop / CSRF behind ALB** → on `CORE_TAG>=v2.5.42`, confirm
+  `04b-nginx-configmap.yaml`'s `server` block still has `real_ip_header
+  X-Forwarded-For` / `set_real_ip_from ${VPC_CIDR}` (on older tags: the nginx
+  container's `DISABLE_SSL_REDIRECT=true` / `NGINX_X_FORWARDED_FOR=true` /
+  `NGINX_SET_REAL_IP_FROM=$VPC_CIDR` env vars), and `BASE_URL=https://$MISP_HOSTNAME`.
+  Pin `ENCRYPTION_KEY`/`SECURITY_SALT` across replicas.
 - **nginx `CrashLoopBackOff` with `host not found in upstream "misp-php"` / FastCGI
-  cannot connect** → the php-fpm Service must be named exactly `misp-php` on 9002;
-  the official image's `/kubernetes/entrypoint_nginx.sh` hardcodes
-  `fastcgi_pass misp-php:9002` (not configurable via env var). Verify the service
-  name and that php-fpm is ready.
+  cannot connect** → the php-fpm Service must be named exactly `misp-php` on 9002.
+  On `CORE_TAG>=v2.5.42` this is hardcoded in our own `04b-nginx-configmap.yaml`
+  (`fastcgi_pass misp-php:9002`); on older tags it was hardcoded in the official
+  image's `/kubernetes/entrypoint_nginx.sh` instead. Either way it's not
+  configurable via env var — verify the service name and that php-fpm is ready.
+- **`misp-nginx` pods stuck `ContainerCreating` with `FailedMount ... configmap
+  "nginx-conf" not found`, and/or `misp-modules` has no Deployment at all** →
+  `CORE_TAG>=v2.5.42` needs two extra manifests applied (`03b-deployment-misp-
+  modules.yaml`, `04b-nginx-configmap.yaml`) that older tags don't need — see
+  Phase 2. `make up` already renders both; if you're applying manifests by hand,
+  don't forget them, and apply `04b` **before** `04-deployment-nginx.yaml` so the
+  ConfigMap exists before nginx tries to mount it. Fix if already stuck: apply the
+  missing file(s) — kubelet retries the mount automatically once the ConfigMap
+  exists, no pod restart needed.
+- **MISP UI reports the wrong version (e.g. shows `v2.5.30` after you meant to
+  deploy `v2.5.42`)** → `CORE_TAG` wasn't actually overridden on that `make up`/
+  render invocation and silently fell back to the default. This can look like it
+  "worked" (site loads fine, `HTTP 200`) because `04-deployment-nginx.yaml`'s
+  `command`/`args` run the stock `nginx` binary directly regardless of image tag
+  — a mismatched `CORE_TAG` doesn't break nginx, it just means `misp`/`misp-nginx`
+  are running an unintended `misp-core` version. Check with:
+  `kubectl -n "$NAMESPACE" get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[*].image}{"\n"}{end}'`
+  and re-`render` `03-deployment-misp.yaml`/`04-deployment-nginx.yaml` with the
+  correct `CORE_TAG` exported to fix in place (triggers a rolling update, no data
+  loss).
 - **DB login error `3098 table does not comply ... external plugin`** → you're on
   MySQL 8, not MariaDB. This stack uses RDS **MariaDB** for that reason.
 - **`misp` pod loops resetting to the same early init log lines every ~2.5 min,
@@ -397,22 +444,27 @@ Do this **between every demo session** — see the Cost warning above.
 ## Verify-before-air (build-specific items to confirm in a dry run)
 
 These depend on your exact image build — check them off in rehearsal:
-- [x] nginx entrypoint really targets `misp-php:9002` (hardcoded in
-      `/kubernetes/entrypoint_nginx.sh` — confirmed on `CORE_TAG=v2.5.30`; the
-      php-fpm Service in `02-services.yaml` is named `misp-php` to match)
+- [x] nginx really targets `misp-php:9002` for FastCGI — on `CORE_TAG>=v2.5.42`
+      this is baked into our own `04b-nginx-configmap.yaml`; on older tags it was
+      hardcoded in the official image's `/kubernetes/entrypoint_nginx.sh` instead.
+      Either way the php-fpm Service in `02-services.yaml` must be named `misp-php`
+      to match.
 - [x] `misp-core`'s Redis client has no TLS support (confirmed identical, TLS-less
       `/entrypoint.sh` Redis handling in both `v2.5.30` and `v2.5.42`) — this is why
       `elasticache.tf` runs ElastiCache without transit encryption/auth token
-- [ ] **Do not casually bump `CORE_TAG` past `v2.5.30`.** Confirmed on `v2.5.42`:
-      upstream replaced `/kubernetes/entrypoint_nginx.sh`'s env-driven,
-      `fastcgi_pass`-hack nginx with a raw `nginx` process configured entirely via
-      a ConfigMap on port **8080** (not 80), and moved `misp-modules` out of the
-      `misp` pod into its own Deployment + Service (`MISP_MODULES_FQDN=http://
-      misp-modules`). Upgrading needs a real rework of `02-`/`03-`/`04-` — a new
-      nginx ConfigMap, split modules Deployment/Service, new container port — not
-      just a tag bump. Diff `kubernetes/manifests/` at
-      github.com/MISP/misp-docker against this repo's `k8s/` before trying again.
-- [ ] nginx serves the app on **:80** when `DISABLE_SSL_REDIRECT=true`
+- [x] **`CORE_TAG=v2.5.42` is supported** — this repo's `k8s/` has done the rework
+      upstream needed: `03b-deployment-misp-modules.yaml` (split `misp-modules`
+      Deployment/Service, previously a same-pod sidecar) and
+      `04b-nginx-configmap.yaml` (nginx now runs the stock binary directly,
+      configured entirely via ConfigMap, serving plain HTTP on **:8080** — no more
+      env-var-driven entrypoint script, no more `DISABLE_SSL_REDIRECT`/
+      `NGINX_X_FORWARDED_FOR`/`NGINX_SET_REAL_IP_FROM`; the ALB-trust directives
+      those used to set are hand-added directly into the ConfigMap instead).
+      Validated end-to-end live: pods healthy, `HTTP 200` through the real
+      hostname, background workers processing jobs. If bumping further past
+      `v2.5.42`, diff `kubernetes/manifests/` at github.com/MISP/misp-docker
+      against this repo's `k8s/` first — don't assume this rework still covers a
+      newer release unchanged.
 - [ ] exact HA var names for salt/UUID in your `CORE_TAG` (README HA section lists
       `SALT`/`UUID`; this stack uses `SECURITY_SALT` + `MISP_UUID` — confirm both are honored)
 - [ ] MISP S3 attachment storage works with the scoped IAM **keys** (IRSA may not
