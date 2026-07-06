@@ -102,4 +102,12 @@ down:
 	kubectl delete -f <(envsubst < k8s/06-networkpolicy.yaml) || true
 	kubectl delete namespace "$$NAMESPACE" || true
 	cd terraform
-	terraform destroy
+	# The interactive confirmation stays on this first attempt on purpose. If it
+	# fails, it's usually a transient network blip fetching Helm chart metadata
+	# (the provider needs it even to destroy a helm_release) — not a real problem,
+	# and not a new decision to destroy, since you already confirmed above. Retry
+	# once, non-interactively, to finish the same destroy.
+	terraform destroy || {
+	  echo "terraform destroy failed — retrying once, non-interactively..." >&2
+	  terraform destroy -auto-approve
+	}
