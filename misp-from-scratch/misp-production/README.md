@@ -52,7 +52,7 @@ misp-production/
 │   ├── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
 │   ├── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
 │   ├── dns-cutover-route53.md     ← pointing MISP_HOSTNAME at the ALB via Route 53
-│   ├── production-hardening-checklist.md   ← 47-point production-readiness walkthrough
+│   ├── production-hardening-checklist.md   ← 53-point production-readiness walkthrough
 │   └── production-hardening-checklist.html ← same checklist, self-contained branded page (open in a browser)
 └── misp-eks/
     ├── Makefile                  ← `make up` / `make netpol` / `make down` — see Phase 1/2, Teardown

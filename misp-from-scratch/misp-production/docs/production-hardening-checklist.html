@@ -253,11 +253,13 @@
         <a href="#appsec"><span class="label"><span class="n">02</span> Application Security</span><span class="cnt">6</span></a>
         <a href="#crypto"><span class="label"><span class="n">03</span> Secrets &amp; Crypto</span><span class="cnt">4</span></a>
         <a href="#sharing"><span class="label"><span class="n">04</span> Data &amp; Sharing Governance</span><span class="cnt">5</span></a>
-        <a href="#infra"><span class="label"><span class="n">05</span> Infrastructure Hardening</span><span class="cnt">6</span></a>
+        <a href="#infra"><span class="label"><span class="n">05</span> Infrastructure Hardening</span><span class="cnt">7</span></a>
         <a href="#ha"><span class="label"><span class="n">06</span> High Availability &amp; Scaling</span><span class="cnt">5</span></a>
-        <a href="#backup"><span class="label"><span class="n">07</span> Backups &amp; Recovery</span><span class="cnt">5</span></a>
-        <a href="#observe"><span class="label"><span class="n">08</span> Monitoring &amp; Auditing</span><span class="cnt">5</span></a>
-        <a href="#lifecycle"><span class="label"><span class="n">09</span> Maintenance &amp; Lifecycle</span><span class="cnt">5</span></a>
+        <a href="#perf"><span class="label"><span class="n">07</span> Performance &amp; Scale</span><span class="cnt">2</span></a>
+        <a href="#opsec"><span class="label"><span class="n">08</span> Data Lifecycle &amp; OPSEC</span><span class="cnt">2</span></a>
+        <a href="#backup"><span class="label"><span class="n">09</span> Backups &amp; Recovery</span><span class="cnt">6</span></a>
+        <a href="#observe"><span class="label"><span class="n">10</span> Monitoring &amp; Auditing</span><span class="cnt">5</span></a>
+        <a href="#lifecycle"><span class="label"><span class="n">11</span> Maintenance &amp; Lifecycle</span><span class="cnt">5</span></a>
       </div>
     </nav>
   </header>
@@ -435,7 +437,7 @@
 
   <!-- 05 -->
   <section id="infra">
-    <div class="sec-head"><span class="idx">05</span><h2>Infrastructure Hardening</h2><span class="meta">6 items</span></div>
+    <div class="sec-head"><span class="idx">05</span><h2>Infrastructure Hardening</h2><span class="meta">7 items</span></div>
     <p class="sec-note">The platform underneath MISP. Most of this is already provisioned by the stack — the job here is to understand it and close the remaining gaps for a real production account.</p>
 
     <div class="item">
@@ -478,6 +480,13 @@
       <span class="chips"><span class="chip wired">Wired</span><span class="chip config">Configure</span></span>
       <p class="why">MISP-core has no Redis TLS support, so the ElastiCache endpoint runs without transit encryption — network isolation is the compensating control.</p>
       <p class="how"><span class="tag">how</span><span>Redis lives in private subnets, reachable only from the node security group, and the network policy scopes pod access. For stricter prod, front it with an <code>stunnel</code> sidecar.</span></p>
+    </div>
+
+    <div class="item">
+      <h3>Restrict inbound sync-peer traffic</h3>
+      <span class="chips"><span class="chip config">Configure</span></span>
+      <p class="why">MISP’s web endpoint is internet-facing on the ALB so partner instances can sync — but left fully open it also invites automated scanning and brute-force against the sync and API routes.</p>
+      <p class="how"><span class="tag">how</span><span>If your sync partners have fixed egress IPs, use <code>AWS WAF</code> to allow the sync/API routes (e.g. <code>/servers/serverSync</code>, <code>/events/xml</code>) only from those known addresses.</span></p>
     </div>
   </section>
 
@@ -523,8 +532,48 @@
   </section>
 
   <!-- 07 -->
+  <section id="perf">
+    <div class="sec-head"><span class="idx">07</span><h2>Performance &amp; Scale</h2><span class="meta">2 items</span></div>
+    <p class="sec-note">Under real data volume, two things fall over first: the correlation engine and the PHP runtime. Tune both before a big feed ingest finds them for you.</p>
+
+    <div class="item">
+      <h3>Tune the correlation engine</h3>
+      <span class="chips"><span class="chip config">Configure</span></span>
+      <p class="why">Correlation is one of MISP’s most powerful features and the number-one cause of database CPU spikes and UI lockups — a common IP (say <code>8.8.8.8</code>) or a top-level domain in a large OSINT list gets correlated across millions of records.</p>
+      <p class="how"><span class="tag">set</span><span>Populate <code>MISP.association_whitelist</code> (or lean on warning lists) to skip correlation for common CIDRs, public DNS resolvers, and internal infrastructure domains. <span class="path">Administration → Server Settings → MISP</span></span></p>
+    </div>
+
+    <div class="item">
+      <h3>Raise PHP runtime &amp; execution limits</h3>
+      <span class="chips"><span class="chip config">Configure</span></span>
+      <p class="why">MISP is a php-fpm application, so large feed ingests and heavy API queries hit default PHP limits and surface as <code>504 Gateway Timeout</code> from the ALB.</p>
+      <p class="how"><span class="tag">how</span><span>Tune <code>php.ini</code> in the misp-core image: <code>memory_limit ≥ 2G</code>, <code>max_execution_time ≥ 300</code>, and <code>upload_max_filesize</code> / <code>post_max_size</code> sized for your largest sample uploads.</span></p>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section id="opsec">
+    <div class="sec-head"><span class="idx">08</span><h2>Data Lifecycle &amp; OPSEC</h2><span class="meta">2 items</span></div>
+    <p class="sec-note">Intelligence ages, and events can carry more than you meant to share. Both need a policy rather than good intentions.</p>
+
+    <div class="item">
+      <h3>Set a data retention &amp; pruning policy</h3>
+      <span class="chips"><span class="chip config">Configure</span></span>
+      <p class="why">Threat intelligence degrades in value over time; unbounded accumulation slows queries, inflates RDS storage cost, and drags correlation performance.</p>
+      <p class="how"><span class="tag">how</span><span>Use MISP’s retention/pruning workflow (scripts or a scheduled job) to purge or un-publish OSINT feeds older than ~90–180 days, while keeping vetted internal data indefinitely.</span></p>
+    </div>
+
+    <div class="item is-crit">
+      <h3>Scrub outbound events (OPSEC / PII)</h3>
+      <span class="chips"><span class="chip config">Configure</span><span class="chip crit">Critical</span></span>
+      <p class="why">Analysts sometimes include internal hostnames, usernames, or analyst emails in event descriptions or tags. Synced to an external community, that leaks internal corporate topology and identity data.</p>
+      <p class="how"><span class="tag">how</span><span>Intercept events before publish — via MISP workflows (blueprints) or a <code>ZMQ</code> (ZeroMQ) consumer — to strip internal-only tags and PII before they reach an external sync link.</span></p>
+    </div>
+  </section>
+
+  <!-- 09 -->
   <section id="backup">
-    <div class="sec-head"><span class="idx">07</span><h2>Backups &amp; Recovery</h2><span class="meta">5 items</span></div>
+    <div class="sec-head"><span class="idx">09</span><h2>Backups &amp; Recovery</h2><span class="meta">6 items</span></div>
     <p class="sec-note">Assume something will be deleted, corrupted, or ransomed. Backups only count if you’ve restored from them.</p>
 
     <div class="item">
@@ -561,11 +610,18 @@
       <p class="why">Server settings, feed definitions, taxonomies, and sharing groups are effort to rebuild by hand.</p>
       <p class="how"><span class="tag">how</span><span>Export server settings and feed/sync config periodically; keep the Terraform state backed up in remote state (S3 backend).</span></p>
     </div>
+
+    <div class="item is-crit">
+      <h3>Cross-region replication of secrets &amp; assets</h3>
+      <span class="chips"><span class="chip config">Configure</span><span class="chip crit">Critical</span></span>
+      <p class="why">Multi-AZ RDS survives an AZ failure, not a full-region outage. If the primary region goes dark, you still need your crypto material and attachments somewhere else.</p>
+      <p class="how"><span class="tag">how</span><span>Enable AWS Secrets Manager multi-region replication for <code>misp/instance-secrets</code> (and <code>misp/mysql-credentials</code>), turn on S3 Cross-Region Replication for the attachments bucket, and copy RDS snapshots to the DR region.</span></p>
+    </div>
   </section>
 
-  <!-- 08 -->
+  <!-- 10 -->
   <section id="observe">
-    <div class="sec-head"><span class="idx">08</span><h2>Monitoring &amp; Auditing</h2><span class="meta">5 items</span></div>
+    <div class="sec-head"><span class="idx">10</span><h2>Monitoring &amp; Auditing</h2><span class="meta">5 items</span></div>
     <p class="sec-note">You can’t defend or operate what you can’t see. Audit trails also make MISP itself a source for your SIEM.</p>
 
     <div class="item">
@@ -604,9 +660,9 @@
     </div>
   </section>
 
-  <!-- 09 -->
+  <!-- 11 -->
   <section id="lifecycle">
-    <div class="sec-head"><span class="idx">09</span><h2>Maintenance &amp; Lifecycle</h2><span class="meta">5 items</span></div>
+    <div class="sec-head"><span class="idx">11</span><h2>Maintenance &amp; Lifecycle</h2><span class="meta">5 items</span></div>
     <p class="sec-note">Production is a habit, not a one-time deploy. These keep the instance secure and accurate over time.</p>
 
     <div class="item is-crit">

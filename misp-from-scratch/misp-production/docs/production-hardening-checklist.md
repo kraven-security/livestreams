@@ -210,6 +210,13 @@ here is to understand it and close the remaining gaps for a real production acco
   the network policy scopes pod access. For stricter prod, front it with an `stunnel`
   sidecar.
 
+- **Restrict inbound sync-peer traffic** — `CONFIGURE`
+  MISP's web endpoint is internet-facing on the ALB so partner instances can sync — but
+  left fully open it also invites automated scanning and brute-force against the sync and
+  API routes.
+  *How:* If your sync partners have fixed egress IPs, use AWS WAF to allow the sync/API
+  routes (e.g. `/servers/serverSync`, `/events/xml`) only from those known addresses.
+
 ---
 
 ## 06 · High Availability & Scaling
@@ -249,7 +256,50 @@ is a single toggle — but understand what it flips.
 
 ---
 
-## 07 · Backups & Recovery
+## 07 · Performance & Scale
+
+Under real data volume, two things fall over first: the correlation engine and the PHP
+runtime. Tune both before a big feed ingest finds them for you.
+
+- **Tune the correlation engine** — `CONFIGURE`
+  Correlation is one of MISP's most powerful features and the number-one cause of database
+  CPU spikes and UI lockups — a common IP (say `8.8.8.8`) or a top-level domain in a large
+  OSINT list gets correlated across millions of records.
+  *Set:* Populate `MISP.association_whitelist` (or lean on warning lists) to skip
+  correlation for common CIDRs, public DNS resolvers, and internal infrastructure domains.
+  *Administration → Server Settings → MISP.*
+
+- **Raise PHP runtime & execution limits** — `CONFIGURE`
+  MISP is a php-fpm application, so large feed ingests and heavy API queries hit default PHP
+  limits and surface as `504 Gateway Timeout` from the ALB.
+  *How:* Tune `php.ini` in the misp-core image: `memory_limit ≥ 2G`, `max_execution_time ≥
+  300`, and `upload_max_filesize` / `post_max_size` sized for your largest sample uploads.
+
+---
+
+## 08 · Data Lifecycle & OPSEC
+
+Intelligence ages, and events can carry more than you meant to share. Both need a policy
+rather than good intentions.
+
+- **Set a data retention & pruning policy** — `CONFIGURE`
+  Threat intelligence degrades in value over time; unbounded accumulation slows queries,
+  inflates RDS storage cost, and drags correlation performance.
+  *How:* Use MISP's retention/pruning workflow (scripts or a scheduled job) to purge or
+  un-publish OSINT feeds older than ~90–180 days, while keeping vetted internal data
+  indefinitely.
+
+- **Scrub outbound events (OPSEC / PII)** — `CONFIGURE` `CRITICAL`
+  Analysts sometimes include internal hostnames, usernames, or analyst emails in event
+  descriptions or tags. Synced to an external community, that leaks internal corporate
+  topology and identity data.
+  *How:* Intercept events before publish — via MISP workflows (blueprints) or a ZMQ
+  (ZeroMQ) consumer — to strip internal-only tags and PII before they reach an external
+  sync link.
+
+---
+
+## 09 · Backups & Recovery
 
 Assume something will be deleted, corrupted, or ransomed. Backups only count if you've
 restored from them.
@@ -283,9 +333,16 @@ restored from them.
   *How:* Export server settings and feed/sync config periodically; keep the Terraform state
   backed up in remote state (S3 backend).
 
+- **Cross-region replication of secrets & assets** — `CONFIGURE` `CRITICAL`
+  Multi-AZ RDS survives an AZ failure, not a full-region outage. If the primary region goes
+  dark, you still need your crypto material and attachments somewhere else.
+  *How:* Enable AWS Secrets Manager multi-region replication for `misp/instance-secrets`
+  (and `misp/mysql-credentials`), turn on S3 Cross-Region Replication for the attachments
+  bucket, and copy RDS snapshots to the DR region.
+
 ---
 
-## 08 · Monitoring & Auditing
+## 10 · Monitoring & Auditing
 
 You can't defend or operate what you can't see. Audit trails also make MISP itself a source
 for your SIEM.
@@ -320,7 +377,7 @@ for your SIEM.
 
 ---
 
-## 09 · Maintenance & Lifecycle
+## 11 · Maintenance & Lifecycle
 
 Production is a habit, not a one-time deploy. These keep the instance secure and accurate
 over time.
