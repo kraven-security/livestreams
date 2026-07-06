@@ -382,16 +382,22 @@ logged-in session survives a request served by the other pod (thanks to the pinn
   missing file(s) — kubelet retries the mount automatically once the ConfigMap
   exists, no pod restart needed.
 - **MISP UI reports the wrong version (e.g. shows `v2.5.30` after you meant to
-  deploy `v2.5.42`)** → `CORE_TAG` wasn't actually overridden on that `make up`/
-  render invocation and silently fell back to the default. This can look like it
-  "worked" (site loads fine, `HTTP 200`) because `04-deployment-nginx.yaml`'s
-  `command`/`args` run the stock `nginx` binary directly regardless of image tag
-  — a mismatched `CORE_TAG` doesn't break nginx, it just means `misp`/`misp-nginx`
-  are running an unintended `misp-core` version. Check with:
+  deploy `v2.5.42`)** → the render used a stale `CORE_TAG`/`MODULES_TAG`. The classic
+  cause is a **leftover `export CORE_TAG=…` (and/or `MODULES_TAG=…`) in the shell you
+  ran `make up` from** — the Makefile now assigns these with `:=` so its own defaults
+  win over the environment (and `make up` echoes the resolved tags at the start), but
+  an exported value still leaks in if you drive the manual `envsubst` steps directly,
+  and older checkouts used `?=` which let the environment win silently. Confirm what's
+  exported (`echo "$CORE_TAG $MODULES_TAG"`) and `unset CORE_TAG MODULES_TAG` if
+  they're stale. This can look like it "worked" (site loads fine, `HTTP 200`) because
+  `04-deployment-nginx.yaml`'s `command`/`args` run the stock `nginx` binary directly
+  regardless of image tag — a mismatched `CORE_TAG` doesn't break nginx, it just means
+  `misp`/`misp-nginx` are running an unintended `misp-core` version. Check what's
+  actually running with:
   `kubectl -n "$NAMESPACE" get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[*].image}{"\n"}{end}'`
-  and re-`render` `03-deployment-misp.yaml`/`04-deployment-nginx.yaml` with the
-  correct `CORE_TAG` exported to fix in place (triggers a rolling update, no data
-  loss). If you actually *want* `v2.5.30`, don't just override `CORE_TAG` here —
+  and re-`render` `03-deployment-misp.yaml`/`03b-deployment-misp-modules.yaml`/
+  `04-deployment-nginx.yaml` with the correct tags exported to fix in place (triggers
+  a rolling update, no data loss). If you actually *want* `v2.5.30`, don't just override `CORE_TAG` here —
   switch to the `legacy/misp-2.5.30` branch instead (see the Branches note up
   top), since `main`'s manifests assume the newer split-`misp-modules`/ConfigMap
   architecture regardless of the tag.

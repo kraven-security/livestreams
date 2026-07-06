@@ -17,15 +17,21 @@
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
 
-NAMESPACE   ?= misp
-VPC_CIDR    ?= 10.42.0.0/16
-CORE_TAG    ?= v2.5.42
-MODULES_TAG ?= v3.0.8
+# These use := (not ?=) on purpose. With ?=, an exported shell variable of the same
+# name SILENTLY wins over the default here — e.g. a leftover `export CORE_TAG=v2.5.30`
+# from an earlier session would make `make up` deploy v2.5.30 without warning. With
+# :=, the value below wins over the environment, while an explicit command-line
+# override (`make up CORE_TAG=v2.5.42-RC1`) still takes precedence as documented.
+NAMESPACE   := misp
+VPC_CIDR    := 10.42.0.0/16
+CORE_TAG    := v2.5.42
+MODULES_TAG := v3.0.8
 
 .PHONY: up netpol down
 
 up:
 	test -n "$${AWS_PROFILE:-}" || { echo "AWS_PROFILE is not set — see docs/aws-cli-configuration.md" >&2; exit 1; }
+	echo "Deploying MISP with CORE_TAG=$(CORE_TAG) MODULES_TAG=$(MODULES_TAG) NAMESPACE=$(NAMESPACE)" >&2
 	cd terraform
 	terraform init
 	terraform plan -out tfplan
