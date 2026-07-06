@@ -6,16 +6,6 @@ state (**RDS MariaDB**, **ElastiCache Redis**, **S3** attachments), behind an
 **ALB + ACM TLS**, secrets from **AWS Secrets Manager** via **External Secrets** —
 then harden it and validate the deployment end to end.
 
-> **Scope note:** connecting MISP to a SIEM (Elastic — Agent `ti_misp` / Filebeat,
-> Indicator Match) is intentionally **out of scope here** and covered in a separate,
-> dedicated episode + runbook. This one takes you to a hardened, validated production
-> MISP.
-
-> This is the companion repo to the livestream. The run of show, timings, and
-> fallbacks are kept in a separate (private) production plan; everything you need to
-> deploy, harden, and validate the stack is self-contained in this README and the
-> `docs/` guides.
-
 > **Branches:** `main` targets `CORE_TAG=v2.5.42` (current default) and its
 > split-`misp-modules`/ConfigMap-driven-nginx manifests (see below). If you need
 > the older, pre-refactor `v2.5.30`-era architecture (same-pod `misp-modules`
@@ -98,15 +88,6 @@ it.
 4. (Recommended) Stand up a **break-glass** copy: same Terraform, different
    `cluster_name` + state key, already applied and healthy.
 
-> **Cost warning:** left running 24/7 this stack costs roughly $390-400/month
-> (EKS control plane, a 2-node node group, NAT gateway, RDS, ElastiCache, ALB) —
-> for something that's only live a few hours around each stream. **Destroy it
-> between sessions**: `make down` (see Teardown), then `make up` before the next
-> one (~25-35 min end-to-end including MISP's own first-boot). This is by far the
-> biggest cost lever available — scaling the node group to 0 instead only removes
-> ~40-45% of the idle bill, since RDS/ElastiCache/the EKS control plane/NAT all
-> keep billing regardless of node count.
-
 **Rough monthly breakdown** (lab defaults, `eu-west-1`, running 24/7 — for
 re-estimating in another region or size; on-demand list prices, excluding data
 transfer/storage I/O):
@@ -126,13 +107,13 @@ transfer/storage I/O):
 larger classes) — expect roughly 1.6–2×. The dominant lever is still *time*: destroy
 between sessions.
 
-**Lab vs production is one switch.** Everything above is the `production = false`
-default. Set `production = true` in `terraform.tfvars` to flip the whole stack to a
-production shape in one place — one NAT gateway per AZ, Multi-AZ RDS, a 2-node Redis
-replication group with automatic failover, larger DB/cache classes, RDS deletion
-protection + final snapshot, and a longer Secrets Manager recovery window. Any
-individual sizing/HA variable you set explicitly still overrides the toggle, so you
-can mix (e.g. `production = true` but a smaller `db_instance_class`).
+> **Lab vs production is one switch.** Everything above is the `production = false`
+> default. Set `production = true` in `terraform.tfvars` to flip the whole stack to a
+> production shape in one place — one NAT gateway per AZ, Multi-AZ RDS, a 2-node Redis
+> replication group with automatic failover, larger DB/cache classes, RDS deletion
+> protection + final snapshot, and a longer Secrets Manager recovery window. Any
+> individual sizing/HA variable you set explicitly still overrides the toggle, so you
+> can mix (e.g. `production = true` but a smaller `db_instance_class`).
 
 ---
 
