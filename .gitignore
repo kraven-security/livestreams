@@ -34,7 +34,8 @@ env/
 !*.tfvars.example
 crash.log
 crash.*.log
-.terraform.lock.hcl
+# NOTE: .terraform.lock.hcl is intentionally NOT ignored — commit it so provider
+# versions/hashes are reproducible across machines and CI.
 tfplan
 
 # Kubernetes / kubeconfig

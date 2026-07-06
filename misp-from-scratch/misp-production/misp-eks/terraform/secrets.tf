@@ -34,7 +34,7 @@ resource "random_uuid" "admin_org_uuid" {}
 # ---- mysql-credentials ----
 resource "aws_secretsmanager_secret" "mysql" {
   name                    = "misp/mysql-credentials"
-  recovery_window_in_days = 0 # immediate delete on destroy for a lab; raise for prod
+  recovery_window_in_days = local.secret_recovery_days # 0 (immediate delete) in the lab, 7 in prod
 }
 
 resource "aws_secretsmanager_secret_version" "mysql" {
@@ -52,16 +52,16 @@ resource "aws_secretsmanager_secret_version" "mysql" {
 # ---- instance-secrets ----
 resource "aws_secretsmanager_secret" "instance" {
   name                    = "misp/instance-secrets"
-  recovery_window_in_days = 0
+  recovery_window_in_days = local.secret_recovery_days
 }
 
 resource "aws_secretsmanager_secret_version" "instance" {
   secret_id = aws_secretsmanager_secret.instance.id
   secret_string = jsonencode({
     # Admin / identity
-    ADMIN_EMAIL    = "admin@${var.misp_hostname}"
+    ADMIN_EMAIL    = var.admin_email != "" ? var.admin_email : "admin@${var.misp_hostname}"
     ADMIN_PASSWORD = random_password.admin.result
-    ADMIN_ORG      = "Kraven Security"
+    ADMIN_ORG      = var.admin_org
     ADMIN_ORG_UUID = random_uuid.admin_org_uuid.result
     MISP_UUID      = random_uuid.misp_uuid.result
 

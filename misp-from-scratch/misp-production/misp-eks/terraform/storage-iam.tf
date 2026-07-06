@@ -11,7 +11,9 @@
 
 resource "aws_s3_bucket" "attachments" {
   bucket_prefix = "${var.cluster_name}-misp-attachments-"
-  force_destroy = true # set false for production
+  # Lab: allow `terraform destroy` to empty + delete the bucket. Production: refuse
+  # to destroy a non-empty attachments bucket.
+  force_destroy = !var.production
 }
 
 resource "aws_s3_bucket_public_access_block" "attachments" {
@@ -49,13 +51,13 @@ resource "aws_iam_user_policy" "misp_s3" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = ["s3:ListBucket"]
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
         Resource = [aws_s3_bucket.attachments.arn]
       },
       {
-        Effect = "Allow"
-        Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource = ["${aws_s3_bucket.attachments.arn}/*"]
       }
     ]

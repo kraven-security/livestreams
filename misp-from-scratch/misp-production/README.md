@@ -11,9 +11,10 @@ then harden it and validate the deployment end to end.
 > dedicated episode + runbook. This one takes you to a hardened, validated production
 > MISP.
 
-> This is the companion repo to the livestream plan. Run of show, timings, fallbacks,
-> and the production-readiness checklist live in
-> `MISP-Production-EKS-Elastic-Livestream-Plan.md`.
+> This is the companion repo to the livestream. The run of show, timings, and
+> fallbacks are kept in a separate (private) production plan; everything you need to
+> deploy, harden, and validate the stack is self-contained in this README and the
+> `docs/` guides.
 
 > **Branches:** `main` targets `CORE_TAG=v2.5.42` (current default) and its
 > split-`misp-modules`/ConfigMap-driven-nginx manifests (see below). If you need
@@ -49,7 +50,8 @@ misp-production/
 │   ├── acm-certificate-setup.md    ← issuing + DNS-validating the ACM cert via Cloudflare
 │   ├── tool-installation.md       ← installing awscli, terraform, kubectl, helm, envsubst, jq
 │   ├── aws-cli-configuration.md   ← authenticating the AWS CLI so Terraform/kubectl can use it
-│   └── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
+│   ├── dns-cutover-cloudflare.md  ← pointing MISP_HOSTNAME at the ALB via Cloudflare
+│   └── dns-cutover-route53.md     ← pointing MISP_HOSTNAME at the ALB via Route 53
 └── misp-eks/
     ├── Makefile                  ← `make up` / `make netpol` / `make down` — see Phase 1/2, Teardown
     ├── terraform/                ← EKS foundation (VPC, EKS, RDS, Redis, S3, secrets, addons)
@@ -103,6 +105,33 @@ it.
 > ~40-45% of the idle bill, since RDS/ElastiCache/the EKS control plane/NAT all
 > keep billing regardless of node count.
 
+**Rough monthly breakdown** (lab defaults, `eu-west-1`, running 24/7 — for
+re-estimating in another region or size; on-demand list prices, excluding data
+transfer/storage I/O):
+
+| Component | Lab default | ~$/month |
+|---|---|---|
+| EKS control plane | 1 cluster | ~$73 |
+| Worker nodes | 2× `m5.large` | ~$140 |
+| NAT gateway | 1 (single-AZ) | ~$32 + data |
+| RDS MariaDB | `db.t3.small`, single-AZ, 20 GB gp3 | ~$30 |
+| ElastiCache Redis | 1× `cache.t3.small` | ~$25 |
+| ALB | 1 | ~$20 + LCU |
+| S3 + Secrets Manager | attachments + 2 secrets | ~$2 |
+| **Total** | | **~$390–400** |
+
+`production = true` raises this materially (second NAT, Multi-AZ RDS, 2-node Redis,
+larger classes) — expect roughly 1.6–2×. The dominant lever is still *time*: destroy
+between sessions.
+
+**Lab vs production is one switch.** Everything above is the `production = false`
+default. Set `production = true` in `terraform.tfvars` to flip the whole stack to a
+production shape in one place — one NAT gateway per AZ, Multi-AZ RDS, a 2-node Redis
+replication group with automatic failover, larger DB/cache classes, RDS deletion
+protection + final snapshot, and a longer Secrets Manager recovery window. Any
+individual sizing/HA variable you set explicitly still overrides the toggle, so you
+can mix (e.g. `production = true` but a smaller `db_instance_class`).
+
 ---
 
 ## Quick start (`make`)
@@ -119,8 +148,11 @@ Prerequisites above), the whole thing boils down to three commands from
 
 Override defaults on the command line, e.g. `make up CORE_TAG=v2.5.42-RC1` to pin
 a specific patch/RC of the current architecture. Variables: `NAMESPACE` (default
-`misp`), `VPC_CIDR` (default `10.42.0.0/16`), `CORE_TAG` (default `v2.5.42`),
-`MODULES_TAG` (default `v3.0.8`). For the older `v2.5.30`-era architecture
+`misp`), `CORE_TAG` (default `v2.5.42`), `MODULES_TAG` (default `v3.0.8`). The VPC
+CIDR is **not** a Make override — it's read from `terraform output vpc_cidr` (set it
+via `vpc_cidr` in `terraform.tfvars`) so nginx's trusted-proxy range and the
+NetworkPolicies can never drift from the real VPC. For the older `v2.5.30`-era
+architecture
 (same-pod `misp-modules`, env-var-driven nginx), switch to the
 `legacy/misp-2.5.30` branch instead of just overriding `CORE_TAG` here — see the
 Branches note above.
@@ -136,7 +168,8 @@ time, to understand what's actually happening at each step.
 ```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars: region, cluster_name, misp_hostname, acm_certificate_arn
+# Edit terraform.tfvars: region, cluster_name, misp_hostname, acm_certificate_arn,
+# admin_org, and production (false = cheap lab, true = production-shaped)
 
 export AWS_PROFILE=misp-eks       # or whatever you configured — see docs/aws-cli-configuration.md
 terraform init
@@ -163,7 +196,7 @@ export NAMESPACE="misp"
 export MISP_HOSTNAME="$(terraform output -raw misp_hostname)"
 export ACM_CERT_ARN="$(terraform output -raw acm_certificate_arn)"
 export ESO_ROLE_ARN="$(terraform output -raw eso_irsa_role_arn)"
-export VPC_CIDR="10.42.0.0/16"    # match var.vpc_cidr
+export VPC_CIDR="$(terraform output -raw vpc_cidr)"   # single source of truth — never hand-type this
 export CORE_TAG="v2.5.42"         # pin; check github.com/MISP/misp-docker/blob/master/template.env for current
 export MODULES_TAG="v3.0.8"       # keep paired with CORE_TAG per upstream's template.env
 ```
@@ -223,9 +256,10 @@ kubectl -n "$NAMESPACE" get ingress misp \
 
 ## Phase 3 — DNS cutover + first login
 
-Point `MISP_HOSTNAME` at the ALB (Route 53 ALIAS/CNAME, or see
+Point `MISP_HOSTNAME` at the ALB — see
+[`docs/dns-cutover-route53.md`](docs/dns-cutover-route53.md) for a Route 53 alias, or
 [`docs/dns-cutover-cloudflare.md`](docs/dns-cutover-cloudflare.md) if your domain is
-on Cloudflare instead). Then:
+on Cloudflare instead. Then:
 
 - Browse to `https://$MISP_HOSTNAME` — the ACM cert should be valid.
 - Log in with `admin@$MISP_HOSTNAME` / the generated admin password:
@@ -495,3 +529,10 @@ These depend on your exact image build — check them off in rehearsal:
 | 2–3 | Segment B — MISP on k8s |
 | 4 | Segment C — Production hardening |
 | 5 | Segment D — Validate the deployment |
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE) — use it, adapt it, and run your own MISP
+on it freely.

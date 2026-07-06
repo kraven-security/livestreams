@@ -5,6 +5,12 @@ region          = "eu-west-1"
 cluster_name    = "misp-prod"
 cluster_version = "1.32"
 
+# Identity — change these to your own org (they tag AWS resources and seed MISP's
+# first admin organisation / login).
+owner     = "kraven-security"
+admin_org = "Kraven Security"
+# admin_email = "admin@misp-lab.example.com"   # optional; defaults to admin@<misp_hostname>
+
 # DNS + TLS — issue the ACM cert and validate it OFF-AIR (validation is slow).
 # If your domain is on Cloudflare, use a SINGLE-LEVEL hostname (e.g. the
 # misp-lab.example.com shown here, or misp.example.com) — NOT a nested one like
@@ -13,17 +19,30 @@ cluster_version = "1.32"
 # no matching edge cert and fails the TLS handshake before traffic reaches AWS
 # at all. See docs/dns-cutover-cloudflare.md.
 misp_hostname       = "misp-lab.kravensecurity.com"
-acm_certificate_arn = "arn:aws:acm:eu-west-2:111122223333:certificate/REPLACE-ME"
+acm_certificate_arn = "arn:aws:acm:eu-west-1:111122223333:certificate/REPLACE-ME"  # MUST be in the same region as the cluster/ALB
 
-# Sizing (lab defaults; bump for production). Right-sized for a livestream demo
-# that's destroyed between sessions (see README Cost warning / `make down`) —
-# not meant to carry production headroom.
+# ---- Environment mode ----
+# The one switch that shapes cost vs. resilience:
+#   false (default) = cost-minimized livestream lab, destroyed between sessions
+#                     (single NAT, single-AZ RDS, one Redis node, small burstable
+#                     classes, resources deleted cleanly on `make down`).
+#   true            = production-shaped (one NAT/AZ, Multi-AZ RDS, 2-node Redis with
+#                     failover, larger classes, deletion protection + final snapshot).
+# See README Cost warning / `make down`.
+production = false
+
 node_instance_types = ["m5.large"]
 node_desired        = 2
-node_min            = 1  # no pod anti-affinity/topology spread in k8s/, safe to float to 1
-node_max            = 3  # caps burst cost; steady state is unaffected
 
-db_instance_class    = "db.t3.small"
-db_multi_az          = false
-db_allocated_storage = 20             # storage can only grow later, not shrink
-redis_node_type      = "cache.t3.small"
+# Explicit sizing OVERRIDES (optional). Leave commented to let `production` above
+# pick lab vs. prod defaults; uncomment any line to force a specific value. Shown
+# here are the lab values (== production=false) for reference:
+# node_min             = 1                # prod default: 2
+# node_max             = 3                # prod default: 4
+# db_instance_class    = "db.t3.small"    # prod default: db.t3.medium
+# db_allocated_storage = 20               # prod default: 50 (storage only grows, never shrinks)
+# db_multi_az          = false            # prod default: true
+# redis_node_type      = "cache.t3.small" # prod default: cache.t3.medium
+
+# Lock the EKS public API to your egress IP for production (default is open):
+# api_allowed_cidrs = ["203.0.113.10/32"]

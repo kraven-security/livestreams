@@ -1,0 +1,17 @@
+# Terraform local artifacts — never commit these. (The repo-root .gitignore also
+# covers them; this local copy makes the rule discoverable from the terraform dir
+# and hardens against an accidental `git add -A` here.)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+tfplan
+crash.log
+crash.*.log
+
+# Real values — keep only the .example in git.
+terraform.tfvars
+!terraform.tfvars.example
+
+# NOTE: .terraform.lock.hcl is intentionally committed (provider version pinning) —
+# do NOT add it here.

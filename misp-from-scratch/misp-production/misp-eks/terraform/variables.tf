@@ -3,7 +3,7 @@
 variable "region" {
   description = "AWS region"
   type        = string
-  default     = "eu-west-1" 
+  default     = "eu-west-1"
 }
 
 variable "owner" {
@@ -30,6 +30,19 @@ variable "vpc_cidr" {
   default     = "10.42.0.0/16"
 }
 
+# ---- Environment mode ----
+# The single lab<->prod switch. false (default) = cheap, disposable livestream lab
+# (single NAT, single-AZ RDS, one Redis node, small burstable classes, resources
+# deleted cleanly on `make down`). true = production-shaped (HA + durability +
+# deletion protection). It only sets DEFAULTS — every individual sizing/HA variable
+# below still overrides it when set explicitly, so you can mix (e.g. production=true
+# but a smaller db_instance_class).
+variable "production" {
+  description = "Master toggle: false = cost-minimized lab, true = production-shaped (HA + durable)."
+  type        = bool
+  default     = false
+}
+
 variable "az_count" {
   description = "Number of AZs to spread across"
   type        = number
@@ -42,19 +55,29 @@ variable "node_instance_types" {
   default     = ["m5.large"]
 }
 
+# Sizing vars below default to null and fall back to production-aware values in
+# locals.tf (lab vs prod). Set any of them explicitly to override the toggle.
 variable "node_min" {
-  type    = number
-  default = 2
+  description = "Node group min size. null => 2 if production else 1."
+  type        = number
+  default     = null
 }
 
 variable "node_max" {
-  type    = number
-  default = 4
+  description = "Node group max size. null => 4 if production else 3."
+  type        = number
+  default     = null
 }
 
 variable "node_desired" {
   type    = number
   default = 2
+}
+
+variable "api_allowed_cidrs" {
+  description = "CIDRs allowed to reach the EKS public API endpoint. Lock this to your egress IP for production."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
 }
 
 # ---- Database (RDS for MariaDB) ----
@@ -65,18 +88,21 @@ variable "db_engine_version" {
 }
 
 variable "db_instance_class" {
-  type    = string
-  default = "db.t3.medium" # bump for production load
+  description = "RDS instance class. null => db.t3.medium if production else db.t3.small."
+  type        = string
+  default     = null
 }
 
 variable "db_allocated_storage" {
-  type    = number
-  default = 50
+  description = "RDS storage (GB). null => 50 if production else 20. Storage can only grow later, not shrink."
+  type        = number
+  default     = null
 }
 
 variable "db_multi_az" {
-  type    = bool
-  default = false # set true for production HA
+  description = "RDS Multi-AZ. null => follows the production toggle."
+  type        = bool
+  default     = null
 }
 
 variable "db_name" {
@@ -91,8 +117,9 @@ variable "db_username" {
 
 # ---- Cache (ElastiCache for Redis) ----
 variable "redis_node_type" {
-  type    = string
-  default = "cache.t3.medium"
+  description = "ElastiCache node type. null => cache.t3.medium if production else cache.t3.small."
+  type        = string
+  default     = null
 }
 
 variable "redis_engine_version" {
@@ -109,6 +136,18 @@ variable "misp_hostname" {
 variable "acm_certificate_arn" {
   description = "ARN of a pre-issued, DNS-validated ACM cert for misp_hostname. Issue this OFF-AIR; validation is slow."
   type        = string
+}
+
+variable "admin_org" {
+  description = "Name of the initial MISP admin organisation. Change this to your own org."
+  type        = string
+  default     = "Kraven Security"
+}
+
+variable "admin_email" {
+  description = "Initial MISP admin login. Empty (default) => admin@<misp_hostname>."
+  type        = string
+  default     = ""
 }
 
 variable "namespace" {

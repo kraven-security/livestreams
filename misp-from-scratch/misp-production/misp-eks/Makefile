@@ -8,8 +8,10 @@
 # deployment, so it's deliberately not automated into the same run.
 #
 # Requires AWS_PROFILE to already be exported (see docs/aws-cli-configuration.md).
-# Override CORE_TAG/MODULES_TAG/NAMESPACE/VPC_CIDR on the command line if needed,
-# e.g. `make up CORE_TAG=v2.5.42`.
+# Override CORE_TAG/MODULES_TAG/NAMESPACE on the command line if needed,
+# e.g. `make up CORE_TAG=v2.5.42`. VPC_CIDR is sourced from `terraform output
+# vpc_cidr` (set it in terraform.tfvars, not here); the VPC_CIDR ?= below is only a
+# fallback for `netpol`/`down` when Terraform state can't be read.
 
 .ONESHELL:
 SHELL := /bin/bash
@@ -55,7 +57,9 @@ up:
 	export MISP_HOSTNAME="$$(terraform output -raw misp_hostname)"
 	export ACM_CERT_ARN="$$(terraform output -raw acm_certificate_arn)"
 	export ESO_ROLE_ARN="$$(terraform output -raw eso_irsa_role_arn)"
-	export VPC_CIDR="$(VPC_CIDR)"
+	# Read the CIDR from Terraform (single source of truth) so nginx's set_real_ip_from
+	# and the NetworkPolicies always match the real VPC — not a duplicated Make default.
+	export VPC_CIDR="$$(terraform output -raw vpc_cidr)"
 	export CORE_TAG="$(CORE_TAG)"
 	export MODULES_TAG="$(MODULES_TAG)"
 	cd ../k8s
@@ -100,7 +104,9 @@ up:
 # matches the README's Phase 4 guidance. Not part of `up` on purpose.
 netpol:
 	export NAMESPACE="$(NAMESPACE)"
-	export VPC_CIDR="$(VPC_CIDR)"
+	# Prefer the CIDR Terraform actually provisioned (matches `up`); fall back to the
+	# Make default only if state can't be read.
+	export VPC_CIDR="$$(cd terraform && terraform output -raw vpc_cidr 2>/dev/null || echo $(VPC_CIDR))"
 	envsubst < k8s/06-networkpolicy.yaml | kubectl apply -f -
 	echo "Re-test login + a feed pull afterwards to confirm nothing is wrongly blocked."
 

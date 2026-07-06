@@ -31,7 +31,7 @@ terraform {
   # backend "s3" {
   #   bucket = "my-tf-state-bucket"
   #   key    = "misp-eks/terraform.tfstate"
-  #   region = "eu-west-2"
+  #   region = "eu-west-1"
   #   # dynamodb_table = "tf-locks"   # or use S3 native locking (use_lockfile) on newer providers
   # }
 }

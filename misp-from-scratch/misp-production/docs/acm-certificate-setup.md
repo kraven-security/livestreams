@@ -1,108 +1,102 @@
-# Creating an AWS ACM Certificate (Cloudflare DNS)
+# Issuing + DNS-validating the ACM certificate (Cloudflare)
 
-To create an AWS Certificate Manager (ACM) certificate for your project using a domain managed by Cloudflare, you need to request the certificate in AWS and then add a specific DNS validation record into Cloudflare.
+The ALB terminates TLS with a public ACM certificate for `misp_hostname`. Issue and
+validate it **off-air** — DNS validation is slow and you don't want to wait for it on
+a live stream. This walks through requesting the cert in ACM and adding the
+validation record in Cloudflare. Route 53 users: the flow is the same, you just add
+the validation CNAME in your hosted zone instead (ACM can even create it for you).
 
-Before jumping into the steps, there is a **critical architectural rule** to keep in mind regarding ACM:
+> **ACM certs can't be downloaded.** Unlike Let's Encrypt, an ACM cert never lands on
+> disk as `.crt`/`.key` — it only attaches to AWS-managed resources (ALB, CloudFront,
+> API Gateway). This stack puts an ALB in front of MISP, so ACM is the right fit. If
+> you ever run MISP on a bare EC2 box with no load balancer, use Let's Encrypt
+> (Certbot) instead.
 
-> ⚠️ **Important Note on ACM Certificates:** ACM certificates **cannot** be downloaded as files (like `.crt` or `.key`) to be placed inside a Docker container or directly onto an EC2 instance. They can only be attached to AWS-managed resources like an **Application Load Balancer (ALB)**, **CloudFront distribution**, or **API Gateway**. If your `misp-production` setup uses an ALB or CloudFront in front of it, ACM is the perfect choice. If you are running Docker directly on a single EC2 instance without a load balancer, you should use **Let's Encrypt (Certbot)** instead of ACM.
+> **Region matters.** An ALB-attached cert **must** be issued in the same region as
+> the cluster/ALB (`var.region`, default `eu-west-1`). Only CloudFront requires the
+> cert in `us-east-1`. This stack uses an ALB, so issue the cert in your cluster
+> region.
 
-Assuming you are using an AWS Load Balancer or CloudFront in front of your MISP instance, here is the step-by-step guide to creating and validating your ACM certificate.
-
-> **Choosing the hostname:** if you're also proxying real traffic through Cloudflare
-> (orange cloud) — see [`dns-cutover-cloudflare.md`](dns-cutover-cloudflare.md) —
-> pick a **single-level** hostname (e.g. `misp-lab.kravensecurity.com`), not a
-> nested one like `misp.lab.kravensecurity.com`. This is about Cloudflare's own
-> edge certificate coverage, not ACM — but it's easiest to get right by deciding
-> the hostname once, before requesting either certificate.
-
----
-
-## Step 1: Request the Certificate in AWS ACM
-
-1. Log into your **AWS Management Console**.
-2. **Select your Region:** Ensure you are in the correct AWS region.
-   * If you are attaching this certificate to an **Application Load Balancer (ALB)**, select the exact region where your project is being deployed (e.g., `us-east-1`, `eu-west-1`).
-   * If you plan to use **AWS CloudFront**, you *must* switch your region to **us-east-1 (N. Virginia)**, as CloudFront requires ACM certificates to live there.
-3. Search for and open **Certificate Manager**.
-4. Click **Request a certificate**, select **Request a public certificate**, and click **Next**.
-5. Fill in the domain configuration:
-   * **Fully qualified domain name:** Enter the subdomain you intend to use for MISP (e.g., `misp.kravensecurity.com`) or use a wildcard if you want it to cover multiple services (e.g., `*.kravensecurity.com`).
-   * **Validation method:** Select **DNS validation** (Recommended).
-   * **Key algorithm:** `RSA 2048` (standard and widely compatible).
-6. Click **Request**.
+> **Choosing the hostname.** If you also proxy real traffic through Cloudflare (orange
+> cloud) — see [`dns-cutover-cloudflare.md`](dns-cutover-cloudflare.md) — pick a
+> **single-level** hostname (e.g. `misp-lab.example.com`), not a nested one like
+> `misp.lab.example.com`. That's about Cloudflare's edge-cert coverage, not ACM, but
+> it's easiest to get right by deciding the hostname once, up front.
 
 ---
 
-## Step 2: Retrieve the DNS Validation Records
+## 1. Request the certificate
 
-1. Once requested, you will see a screen showing your certificates. Click on your newly requested certificate ID (it will state **Pending validation**).
-2. Under the **Domains** section, look for the table containing **CNAME name** and **CNAME value**.
-3. Copy both the **CNAME name** and **CNAME value** strings. You will need these for Cloudflare.
+In the ACM console (in your cluster region), **Request a certificate → public
+certificate**, then:
 
----
+- **Fully qualified domain name** — the hostname MISP will serve on (e.g.
+  `misp-lab.example.com`), or a wildcard (`*.example.com`) to cover multiple services.
+- **Validation method** — DNS validation.
+- **Key algorithm** — `RSA 2048` (widely compatible).
 
-## Step 3: Add the CNAME Record to Cloudflare
-
-1. Log into your **Cloudflare Dashboard** and select your domain `kravensecurity.com`.
-2. Go to **DNS** > **Records** on the left-hand sidebar.
-3. Click **Add record** and configure it as follows:
-   * **Type:** `CNAME`
-   * **Name:** Paste the **CNAME name** provided by AWS.
-     *(Note: AWS gives you the full string like `_x2.misp.kravensecurity.com.`. Cloudflare is smart—if you paste the whole thing, it will automatically strip your root domain out and leave just the host section, which is correct).*
-   * **Target:** Paste the exact **CNAME value** provided by AWS (e.g., `_x3.acm-validations.aws.`).
-   * **Proxy status:** 🛑 **DNS Only (Grey Cloud)**. This is the most crucial step! If you leave it as *Proxied (Orange Cloud)*, AWS's validation servers will hit Cloudflare's edge proxy instead of reading the raw validation record, and your certificate will remain stuck in pending indefinitely.
-4. Click **Save**.
+Request it, then note the certificate ARN — it goes into `acm_certificate_arn` in
+`terraform.tfvars`.
 
 ---
 
-## Step 4: Wait for Validation
+## 2. Grab the validation record
 
-AWS continuously polls for this record. Now that Cloudflare is serving the grey-clouded CNAME record, AWS will usually discover it within 2 to 10 minutes.
-
-Refresh your AWS ACM console page. The status will update from **Pending validation** to **Issued**.
-
----
-
-## Troubleshooting: CAA error blocking validation
-
-A CAA (Certificate Authority Authorization) record is essentially a security guest list for your domain. It tells the internet exactly which Certificate Authorities (like Amazon, Let's Encrypt, or DigiCert) are allowed to issue SSL certificates for your domain.
-
-If ACM validation stalls or fails with a CAA error, it means you either have an existing CAA record in Cloudflare that explicitly restricts issuance to another provider (like Let's Encrypt), or Cloudflare's default settings are blocking AWS. Amazon sees this restriction, respects it, and safely halts the validation.
-
-To fix this, you just need to put Amazon on the guest list in Cloudflare.
-
-**How to fix the CAA error in Cloudflare:**
-
-1. Log into your **Cloudflare Dashboard** and select `kravensecurity.com`.
-2. Go to **DNS** > **Records**.
-3. Look through your existing records to see if you have any types labeled **CAA**. If you see them (e.g., one allowing `letsencrypt.org`), do not delete them if you are using them for other parts of your site. We will just add AWS alongside them.
-4. Click **Add record** and configure it with these exact settings:
-   * **Type:** `CAA`
-   * **Name:** `@` (This applies it to the root domain and all subdomains, including your MISP project).
-   * **Tag:** Select **Only allow specific CAs to issue certificates (issue)**.
-   * **Value/CA Domain Name:** `amazon.com`
-   * **TTL:** Auto (or 10 minutes).
-5. Click **Save**.
-
-**What to do next:**
-
-Once you save that record, Cloudflare updates its DNS almost instantly.
-
-AWS ACM will automatically retry validation periodically, but it can sometimes take a few hours for AWS to trigger a re-check on its own. To speed things up and bypass the wait:
-
-1. Go back to AWS ACM.
-2. Delete the pending certificate that failed.
-3. Click **Request a new one** exactly like you did before.
-
-Because the CAA record is now live in Cloudflare, AWS will check the domain, see `amazon.com` on the approved list, read your validation CNAME, and issue your certificate within minutes.
+Open the pending certificate. Under **Domains**, copy the **CNAME name** and **CNAME
+value** — you'll add them to Cloudflare next.
 
 ---
 
-## Step 5: Connecting Your Main Traffic (Optional Tip)
+## 3. Add the CNAME in Cloudflare
 
-Once the certificate is **Issued**, you can attach it to your AWS Application Load Balancer's HTTPS listener (Port 443).
+**DNS → Records → Add record:**
 
-When you create the actual DNS record pointing traffic from `misp.kravensecurity.com` to your AWS Load Balancer URL:
+- **Type** — `CNAME`
+- **Name** — the ACM **CNAME name** (Cloudflare strips your root domain automatically
+  if you paste the full string).
+- **Target** — the ACM **CNAME value** (e.g. `_x3.acm-validations.aws.`).
+- **Proxy status** — **DNS only (grey cloud)**. This is the step people miss: if it's
+  proxied (orange cloud), AWS's validators hit Cloudflare's edge instead of reading
+  the raw record, and the cert sits in *Pending validation* forever.
 
-1. You can safely keep that record **Proxied (Orange Cloud)** in Cloudflare to benefit from Cloudflare's DDoS protection and WAF.
-2. In Cloudflare, make sure your **SSL/TLS encryption mode** is set to **Full** or **Full (strict)**. This ensures that the traffic between Cloudflare and your AWS Load Balancer remains entirely encrypted using the ACM certificate you just stood up.
+---
+
+## 4. Wait for issuance
+
+ACM polls for the record and usually flips **Pending validation → Issued** within
+2–10 minutes. Refresh the ACM console to confirm.
+
+---
+
+## Troubleshooting — CAA record blocks validation
+
+A CAA record is an allow-list of which Certificate Authorities may issue certs for
+your domain. If validation stalls with a CAA error, an existing CAA record (or a
+Cloudflare default) is restricting issuance to another CA, and Amazon respects it and
+stops. Fix: add Amazon to the list.
+
+**Cloudflare → DNS → Records → Add record:**
+
+- **Type** — `CAA`
+- **Name** — `@` (root domain + all subdomains)
+- **Tag** — *Only allow specific CAs to issue certificates (issue)*
+- **Value / CA domain name** — `amazon.com`
+- **TTL** — Auto
+
+Existing CAA records you use elsewhere can stay — this adds AWS alongside them. ACM
+retries on its own, but to skip the wait: delete the pending cert and request a fresh
+one. With `amazon.com` now allow-listed, it validates within minutes.
+
+---
+
+## Attaching real traffic (optional)
+
+Once the cert is **Issued**, Terraform attaches it to the ALB's HTTPS listener via
+`acm_certificate_arn`. When you later point `misp_hostname` at the ALB (see
+[`dns-cutover-cloudflare.md`](dns-cutover-cloudflare.md) or
+[`dns-cutover-route53.md`](dns-cutover-route53.md)):
+
+- You can keep that record **proxied (orange cloud)** in Cloudflare for DDoS/WAF
+  cover.
+- Set Cloudflare's **SSL/TLS mode** to **Full (strict)** so Cloudflare→ALB stays
+  encrypted against the ACM cert — never *Flexible*.

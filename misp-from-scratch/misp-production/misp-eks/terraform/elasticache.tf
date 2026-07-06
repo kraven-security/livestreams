@@ -48,11 +48,13 @@ resource "aws_elasticache_replication_group" "this" {
 
   engine         = "redis"
   engine_version = var.redis_engine_version
-  node_type      = var.redis_node_type
+  node_type      = local.effective_redis_class
   port           = 6379
 
-  num_cache_clusters         = 1   # bump to >=2 + automatic_failover for HA
-  automatic_failover_enabled = false
+  # Lab: one node, no failover. Production: two nodes + automatic failover (both
+  # driven by var.production, so they stay consistent).
+  num_cache_clusters         = local.effective_redis_nodes
+  automatic_failover_enabled = var.production
 
   subnet_group_name  = aws_elasticache_subnet_group.this.name
   security_group_ids = [aws_security_group.redis.id]

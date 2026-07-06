@@ -10,9 +10,11 @@ module "eks" {
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
 
-  # Public endpoint so you can kubectl from your stream box. For production, set
-  # cluster_endpoint_public_access_cidrs to your egress IP, or go private + bastion.
-  cluster_endpoint_public_access = true
+  # Public endpoint so you can kubectl from your stream box. Lock it down for
+  # production by setting var.api_allowed_cidrs to your egress IP (or go private +
+  # bastion). Default ["0.0.0.0/0"] keeps the lab convenient.
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_public_access_cidrs = var.api_allowed_cidrs
 
   enable_irsa = true
 
@@ -38,8 +40,8 @@ module "eks" {
   eks_managed_node_groups = {
     default = {
       instance_types = var.node_instance_types
-      min_size       = var.node_min
-      max_size       = var.node_max
+      min_size       = local.effective_node_min
+      max_size       = local.effective_node_max
       desired_size   = var.node_desired
       # Pre-pull the large misp-core image into the AMI cache off-air if you can;
       # a cold pull on a fresh node is a classic on-air stall.

@@ -22,8 +22,8 @@ module "vpc" {
   private_subnets = local.private_subnets
   public_subnets  = local.public_subnets
 
-  enable_nat_gateway = true
-  single_nat_gateway = true # cheaper for a lab; use one-per-AZ for production resilience
+  enable_nat_gateway   = true
+  single_nat_gateway   = !var.production # one NAT for the lab; one-per-AZ when production
   enable_dns_hostnames = true
   enable_dns_support   = true
 

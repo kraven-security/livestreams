@@ -47,10 +47,10 @@ module "rds" {
 
   engine               = "mariadb"
   engine_version       = var.db_engine_version
-  family               = "mariadb11.4" # match major.minor of db_engine_version
-  major_engine_version = "11.4"
-  instance_class       = var.db_instance_class
-  allocated_storage    = var.db_allocated_storage
+  family               = local.db_family # derived from db_engine_version (locals.tf)
+  major_engine_version = local.db_major
+  instance_class       = local.effective_db_class
+  allocated_storage    = local.effective_db_storage
   storage_type         = "gp3"
   storage_encrypted    = true
 
@@ -63,7 +63,7 @@ module "rds" {
   # in Secrets Manager for MISP. Disable RDS-managed master password.
   manage_master_user_password = false
 
-  multi_az               = var.db_multi_az
+  multi_az               = local.effective_db_multi_az
   vpc_security_group_ids = [aws_security_group.rds.id]
   create_db_subnet_group = true
   subnet_ids             = module.vpc.private_subnets
@@ -74,6 +74,6 @@ module "rds" {
   parameters = []
 
   backup_retention_period = 7
-  deletion_protection     = false # set true for production
-  skip_final_snapshot     = true  # set false for production
+  deletion_protection     = var.production  # protected in prod; disposable in the lab
+  skip_final_snapshot     = !var.production # take a final snapshot in prod, skip in the lab
 }

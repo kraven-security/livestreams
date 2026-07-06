@@ -28,7 +28,7 @@ least-privilege production pattern).
    aws configure --profile misp-eks
    # AWS Access Key ID:     AKIA...
    # AWS Secret Access Key: ...
-   # Default region name:   eu-west-2      # match terraform.tfvars `region`
+   # Default region name:   eu-west-1      # match terraform.tfvars `region`
    # Default output format: json
    ```
 4. Point every terminal you use for this runbook at that profile:
