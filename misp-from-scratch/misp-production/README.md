@@ -15,6 +15,14 @@ then harden it and validate the deployment end to end.
 > and the production-readiness checklist live in
 > `MISP-Production-EKS-Elastic-Livestream-Plan.md`.
 
+> **Branches:** `main` targets `CORE_TAG=v2.5.42` (current default) and its
+> split-`misp-modules`/ConfigMap-driven-nginx manifests (see below). If you need
+> the older, pre-refactor `v2.5.30`-era architecture (same-pod `misp-modules`
+> sidecar, env-var-driven nginx entrypoint), use the
+> [`legacy/misp-2.5.30`](https://github.com/kraven-security/livestreams/tree/legacy/misp-2.5.30)
+> branch instead of overriding `CORE_TAG` on `main` — `main`'s `k8s/` manifests
+> assume the newer architecture regardless of which `CORE_TAG` you point them at.
+
 ---
 
 ## What gets built
@@ -109,9 +117,13 @@ Prerequisites above), the whole thing boils down to three commands from
 | `make netpol` | Applies `06-networkpolicy.yaml` (Phase 4) — run only after confirming login + a feed pull work. Kept separate from `make up` on purpose: a misconfigured policy looks identical to a broken deployment, so you always want to be confirming health with policies off first. |
 | `make down` | Full teardown: deletes the NetworkPolicy + namespace, then `terraform destroy`. Run this **between every demo session** — see the Cost warning above. |
 
-Override defaults on the command line, e.g. `make up CORE_TAG=v2.5.30`.
-Variables: `NAMESPACE` (default `misp`), `VPC_CIDR` (default `10.42.0.0/16`),
-`CORE_TAG` (default `v2.5.42`), `MODULES_TAG` (default `v3.0.8`).
+Override defaults on the command line, e.g. `make up CORE_TAG=v2.5.42-RC1` to pin
+a specific patch/RC of the current architecture. Variables: `NAMESPACE` (default
+`misp`), `VPC_CIDR` (default `10.42.0.0/16`), `CORE_TAG` (default `v2.5.42`),
+`MODULES_TAG` (default `v3.0.8`). For the older `v2.5.30`-era architecture
+(same-pod `misp-modules`, env-var-driven nginx), switch to the
+`legacy/misp-2.5.30` branch instead of just overriding `CORE_TAG` here — see the
+Branches note above.
 
 `make up`/`make netpol`/`make down` are just wrappers around the exact manual
 steps in Phases 1-5 below — worth reading through once, especially the first
@@ -345,7 +357,10 @@ logged-in session survives a request served by the other pod (thanks to the pinn
   `kubectl -n "$NAMESPACE" get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[*].image}{"\n"}{end}'`
   and re-`render` `03-deployment-misp.yaml`/`04-deployment-nginx.yaml` with the
   correct `CORE_TAG` exported to fix in place (triggers a rolling update, no data
-  loss).
+  loss). If you actually *want* `v2.5.30`, don't just override `CORE_TAG` here —
+  switch to the `legacy/misp-2.5.30` branch instead (see the Branches note up
+  top), since `main`'s manifests assume the newer split-`misp-modules`/ConfigMap
+  architecture regardless of the tag.
 - **DB login error `3098 table does not comply ... external plugin`** → you're on
   MySQL 8, not MariaDB. This stack uses RDS **MariaDB** for that reason.
 - **`misp` pod loops resetting to the same early init log lines every ~2.5 min,
