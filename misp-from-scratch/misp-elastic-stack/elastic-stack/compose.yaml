@@ -1,0 +1,113 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${VERSION}
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+    ports:
+      - ${ELASTIC_PORT}:9200
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    mem_limit: ${MEMORY_LIMIT}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -u elastic:${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  kibana-setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${VERSION}
+    user: root
+    volumes:
+      - fleet-token:/fleet-token
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        echo "Setting kibana_system password..."
+        curl -sf -X POST -u 'elastic:${ELASTIC_PASSWORD}' \
+          -H 'Content-Type: application/json' \
+          http://elasticsearch:9200/_security/user/kibana_system/_password \
+          -d '{"password":"${ELASTIC_PASSWORD}"}'
+        echo "Creating Fleet Server service account token..."
+        curl -sf -X DELETE -u 'elastic:${ELASTIC_PASSWORD}' \
+          http://elasticsearch:9200/_security/service/elastic/fleet-server/credential/token/fleet-server-token 2>/dev/null || true
+        TOKEN_RESPONSE=$$(curl -s -X POST -u 'elastic:${ELASTIC_PASSWORD}' \
+          http://elasticsearch:9200/_security/service/elastic/fleet-server/credential/token/fleet-server-token)
+        echo "Token API response: $$TOKEN_RESPONSE"
+        TOKEN=$$(echo "$$TOKEN_RESPONSE" | sed -n 's/.*"value":"\([^"]*\)".*/\1/p')
+        if [ -z "$$TOKEN" ]; then
+          echo "ERROR: Failed to extract fleet token from response above"
+          exit 1
+        fi
+        printf '%s' "$$TOKEN" > /fleet-token/value
+        echo "Fleet token written. Setup complete."
+    restart: "no"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${VERSION}
+    container_name: kibana
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: 'testenv-fleet-encryption-key-32ch'
+      XPACK_FLEET_AGENTS_FLEET_SERVER_HOSTS: '["http://${ELASTIC_IP}:${FLEET_PORT}"]'
+      XPACK_FLEET_AGENTS_ELASTICSEARCH_HOSTS: '["http://${ELASTIC_IP}:${ELASTIC_PORT}"]'
+    ports:
+      - ${KIBANA_PORT}:5601
+    depends_on:
+      kibana-setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  fleet-server:
+    user: root
+    image: docker.elastic.co/elastic-agent/elastic-agent:${VERSION}
+    container_name: fleet-server
+    volumes:
+      - fleet-token:/fleet-token
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        if [ ! -s /fleet-token/value ]; then
+          echo "ERROR: /fleet-token/value is missing or empty — kibana-setup may have failed"
+          exit 1
+        fi
+        export FLEET_SERVER_SERVICE_TOKEN=$$(cat /fleet-token/value)
+        echo "Fleet token loaded."
+        exec /usr/share/elastic-agent/elastic-agent container
+    environment:
+      FLEET_SERVER_ENABLE: "1"
+      FLEET_SERVER_ELASTICSEARCH_HOST: http://elasticsearch:9200
+      FLEET_SERVER_INSECURE_HTTP: "true"
+      FLEET_SERVER_HOST: "0.0.0.0"
+      FLEET_SERVER_PORT: "8220"
+      FLEET_ENROLL: "1"
+      FLEET_SERVER_POLICY_ID: "fleet-server-policy"
+      KIBANA_FLEET_SETUP: "1"
+      KIBANA_HOST: "http://kibana:5601"
+      FLEET_URL: "https//fleet-server:8220"
+      KIBANA_FLEET_USERNAME: elastic
+      KIBANA_FLEET_PASSWORD: ${ELASTIC_PASSWORD}
+
+    ports:
+      - ${FLEET_PORT}:8220
+    depends_on:
+      kibana-setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  elasticsearch-data:
+  fleet-token:
