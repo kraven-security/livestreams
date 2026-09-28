@@ -1,0 +1,64 @@
+# --- Secrets & environment files (all projects) ---
+.env
+.env.*
+*.env
+!template.env
+!env.example
+!**/env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Logs ---
+*.log
+*.log.[0-9]*
+logs/
+
+# --- Certificates & keys ---
+*.pem
+*.key
+*.crt
+certs/
+
+# --- misp-docker runtime data ---
+misp-docker/configs/
+misp-docker/files/
+misp-docker/gnupg/
+misp-docker/logs/
+misp-docker/ssl/
+misp-docker/custom/
+misp-docker/env.hcl
+misp-docker/docker-compose.override.yml
+
+# --- misp-scraper config (contains MISP API key) ---
+misp-scraper/scraper.py
+misp-scraper/docker/config/
+
+# --- zsazsa config & runtime data (API keys, databases, state) ---
+zsazsa/config/*.py
+zsazsa/config/__init__.py.backup
+zsazsa/config/__init__.py.tmp
+!zsazsa/config/__init__.py.example
+zsazsa/data/*.db
+zsazsa/data/state.json
+zsazsa/data/feed_cache/
+zsazsa/data/uploads/
+zsazsa/input/
+zsazsa/prompts/
+
+# --- Editor / OS / tooling ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+.claude/
