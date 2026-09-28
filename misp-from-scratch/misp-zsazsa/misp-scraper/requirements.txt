@@ -1,0 +1,8 @@
+setuptools
+curl_cffi
+feedparser
+redis
+pymisp
+bs4
+markdownify
+flask

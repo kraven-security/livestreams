@@ -1,0 +1,14 @@
+{
+	"feeds": [
+		{
+			"title": "Proofpoint",
+			"tags": ["admiralty-scale:source-reliability=\"b\""],
+			"url": "https://www.proofpoint.com/us/threat-insight-blog.xml"
+		},
+                {
+                        "title": "Darkreading",
+                        "tags": ["admiralty-scale:source-reliability=\"b\""],
+                        "url": "https://www.darkreading.com/rss.xml"
+                }
+	]
+}
