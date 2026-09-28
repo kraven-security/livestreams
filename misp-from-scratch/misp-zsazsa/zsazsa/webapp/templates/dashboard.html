@@ -1,0 +1,497 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | zsazsa CTI{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+
+{% if ui_theme == 'default' %}
+<div class="d-flex justify-content-end mb-3">
+  <div class="alert alert-info py-1 px-3 mb-0 small d-inline-flex align-items-center">
+    <i class="fas fa-palette me-2"></i>
+    Did you know zsazsa also supports the UiBeta and Overmind themes?
+    <a href="{{ url_for('config_page.index') }}" class="alert-link ms-1">Change theme</a>
+  </div>
+</div>
+{% endif %}
+
+{# Action bar: quick-action tiles (left) and collection-pipeline controls (right). #}
+<style>
+  /* Shared panel look lives in app.css; the two panels sit side by side here,
+     so they stretch to a common height. No overflow clipping: the Start
+     analyser menu drops out of the panel and would be cut off at its edge. */
+  .action-bar { margin-bottom: 1.5rem; }
+  .action-panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .action-panel-head { padding: .65rem .9rem; }
+  .action-panel-body { padding: .9rem; flex: 1; }
+
+  /* Primary action tiles (left, 75%) */
+  .action-tiles { display: flex; flex-wrap: wrap; gap: .75rem; }
+  .action-tile {
+    flex: 1 1 180px;
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    padding: .9rem 1rem;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-light);
+    background: var(--surface-muted);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .12s ease;
+  }
+  .action-tile:hover {
+    transform: translateY(-2px);
+    background: var(--card-bg);
+    border-color: var(--tile-accent);
+    box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--tile-accent) 55%, transparent);
+  }
+  .action-tile-icon {
+    flex-shrink: 0;
+    width: 42px; height: 42px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    font-size: 1.05rem;
+    color: #fff;
+    background: var(--tile-accent);
+    box-shadow: 0 4px 10px -4px color-mix(in srgb, var(--tile-accent) 70%, transparent);
+  }
+  .action-tile-text { display: flex; flex-direction: column; line-height: 1.2; }
+  .action-tile-label { font-weight: 600; font-size: .95rem; }
+  .action-tile-sub { font-size: .76rem; color: var(--text-muted); margin-top: 1px; }
+
+  /* Pipeline panel (right, 25%) */
+  .pipeline-actions { display: flex; flex-wrap: nowrap; gap: .35rem; }
+  .pipeline-actions .btn-group { flex: 0 1 auto; }
+  .pipeline-actions .btn {
+    padding: .2rem .5rem;
+    font-size: .72rem;
+    white-space: nowrap;
+  }
+  .pipeline-dot {
+    display: inline-flex; align-items: center; gap: .35rem;
+    font-size: .72rem; font-weight: 600;
+  }
+  .pipeline-dot::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent-green);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-green) 22%, transparent);
+  }
+  .pipeline-stats {
+    margin-top: .75rem;
+    padding-top: .65rem;
+    border-top: 1px solid var(--border-faint);
+    display: flex; flex-wrap: wrap; gap: .2rem .9rem;
+    font-size: .78rem;
+  }
+  .pipeline-stat { display: inline-flex; align-items: baseline; gap: .3rem; white-space: nowrap; }
+  .pipeline-stat .label { color: var(--text-muted); }
+  .pipeline-stat .value { font-weight: 600; }
+  .pipeline-stat.full { flex-basis: 100%; }
+  .pipeline-stat .sub { color: var(--text-muted); font-weight: 400; font-size: .72rem; }
+
+  @media (max-width: 575.98px) {
+    .action-tiles { flex-direction: column; }
+  }
+</style>
+
+<div class="row g-3 action-bar">
+  <!-- Left 75%: primary actions -->
+  <div class="col-lg-9">
+    <div class="action-panel">
+      <div class="action-panel-head">
+        <span class="action-panel-title"><i class="fas fa-bolt me-1"></i> Quick actions</span>
+      </div>
+      <div class="action-panel-body">
+        <div class="action-tiles">
+          <a href="{{ url_for('data_collection.index') }}" class="action-tile" style="--tile-accent: var(--accent-blue);">
+            <span class="action-tile-icon"><i class="fas fa-layer-group"></i></span>
+            <span class="action-tile-text">
+              <span class="action-tile-label">Review data collection</span>
+              <span class="action-tile-sub">Triage incoming events</span>
+            </span>
+          </a>
+          <a href="{{ url_for('data_collection.manual_new') }}" class="action-tile" style="--tile-accent: var(--accent-green);">
+            <span class="action-tile-icon"><i class="fas fa-newspaper"></i></span>
+            <span class="action-tile-text">
+              <span class="action-tile-label">Add news story</span>
+              <span class="action-tile-sub">Capture a source manually</span>
+            </span>
+          </a>
+          <a href="{{ url_for('rfi.rfi_new') }}" class="action-tile" style="--tile-accent: var(--accent-orange);">
+            <span class="action-tile-icon"><i class="fas fa-circle-question"></i></span>
+            <span class="action-tile-text">
+              <span class="action-tile-label">New RFI</span>
+              <span class="action-tile-sub">Log a request for information</span>
+            </span>
+          </a>
+          <a href="{{ url_for('requirements.pir_new') }}" class="action-tile" style="--tile-accent: #7c5cd6;">
+            <span class="action-tile-icon"><i class="fas fa-star"></i></span>
+            <span class="action-tile-text">
+              <span class="action-tile-label">New PIR</span>
+              <span class="action-tile-sub">Define an intelligence requirement</span>
+            </span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right 25%: collection pipeline -->
+  <div class="col-lg-3">
+    <div class="action-panel">
+      <div class="action-panel-head">
+        <span class="action-panel-title"><i class="fas fa-arrows-rotate me-1"></i> Collection pipeline</span>
+        <span id="pipeline-health"></span>
+      </div>
+      <div class="action-panel-body">
+        <div class="pipeline-actions">
+          <div class="btn-group">
+            <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <i class="fas fa-play me-1"></i> Start analyser
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><button class="dropdown-item pipeline-action-btn" type="button" data-action="daily-briefing">Daily briefing</button></li>
+              <li><button class="dropdown-item pipeline-action-btn" type="button" data-action="flash-intel">Flash intel alert</button></li>
+              <li><button class="dropdown-item pipeline-action-btn" type="button" data-action="vea">Vuln advisory</button></li>
+            </ul>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary" id="pipeline-progress-open" type="button" data-bs-toggle="modal" data-bs-target="#pipelineProgressModal">
+            <i class="fas fa-list-check me-1"></i> Progress
+          </button>
+          <a href="{{ url_for('pipeline.index') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-clock-rotate-left me-1"></i> History
+          </a>
+        </div>
+        <div id="pipeline-action-status" class="alert alert-info py-1 px-2 mt-2 mb-0 small d-none" role="status"></div>
+        <div id="pipeline-stats-mount" class="pipeline-stats">
+          <div class="pipeline-stat"><span class="label">Last run</span><span class="value text-muted">&hellip;</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Data-dependent sections load asynchronously so the action bar paints
+   immediately; see /dashboard/widgets and the loader script below. #}
+<div id="dashboard-data">
+  <div class="text-center text-muted py-5">
+    <i class="fas fa-circle-notch fa-spin fa-lg"></i>
+    <div class="small mt-2">Loading dashboard…</div>
+  </div>
+</div>
+
+<div class="modal fade" id="pipelineProgressModal" tabindex="-1" aria-labelledby="pipelineProgressModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="pipelineProgressModalLabel">Analyser progress</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div>
+            <div class="text-muted small">Current action</div>
+            <div id="pipeline-progress-action" class="fw-semibold">-</div>
+          </div>
+          <div class="text-end">
+            <div class="text-muted small">Remaining steps</div>
+            <div id="pipeline-progress-remaining" class="fw-semibold">-</div>
+          </div>
+        </div>
+        <div id="pipeline-progress-message" class="alert alert-info py-2 px-3 mb-3">No active run.</div>
+        <div class="mb-3">
+          <div class="text-muted small mb-1">Steps</div>
+          <ul id="pipeline-progress-steps" class="list-group"></ul>
+        </div>
+        <div>
+          <div class="text-muted small mb-1">Log</div>
+          <div id="pipeline-progress-log" class="border rounded p-2" style="font-size:.85rem;max-height:220px;overflow:auto;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.analyser-info-icon').forEach(function(el) {
+  new bootstrap.Tooltip(el, {trigger: 'hover focus'});
+});
+(function() {
+  var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  var csrfToken = csrfMeta ? csrfMeta.content : '';
+  var statusEl = document.getElementById('pipeline-action-status');
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('.pipeline-action-btn'));
+  var openProgressBtn = document.getElementById('pipeline-progress-open');
+  var progressActionEl = document.getElementById('pipeline-progress-action');
+  var progressRemainingEl = document.getElementById('pipeline-progress-remaining');
+  var progressMessageEl = document.getElementById('pipeline-progress-message');
+  var progressStepsEl = document.getElementById('pipeline-progress-steps');
+  var progressLogEl = document.getElementById('pipeline-progress-log');
+  var activeJobId = null;
+  var pollTimer = null;
+
+  function setStatus(kind, text) {
+    if (!statusEl) return;
+    statusEl.classList.remove('d-none', 'alert-info', 'alert-success', 'alert-danger', 'alert-warning');
+    statusEl.classList.add('alert-' + kind);
+    statusEl.textContent = text;
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderProgress(job) {
+    if (!job) return;
+    // The job carries its own label, set when it was created.
+    if (progressActionEl) progressActionEl.textContent = job.label || job.action || '-';
+
+    var steps = Array.isArray(job.steps) ? job.steps : [];
+    var remaining = steps.filter(function(s) { return s.state === 'pending'; }).length;
+    if (progressRemainingEl) progressRemainingEl.textContent = String(remaining);
+
+    if (progressMessageEl) {
+      progressMessageEl.classList.remove('alert-info', 'alert-success', 'alert-danger', 'alert-warning');
+      var tone = 'alert-info';
+      if (job.status === 'completed') tone = 'alert-success';
+      else if (job.status === 'failed') tone = 'alert-danger';
+      else if (job.status === 'queued') tone = 'alert-warning';
+      progressMessageEl.classList.add(tone);
+      progressMessageEl.textContent = job.message || job.status || 'Running...';
+    }
+
+    if (progressStepsEl) {
+      progressStepsEl.innerHTML = steps.map(function(step) {
+        var icon = 'fa-clock text-muted';
+        if (step.state === 'in_progress') icon = 'fa-spinner fa-spin text-primary';
+        else if (step.state === 'completed') icon = 'fa-check-circle text-success';
+        else if (step.state === 'failed') icon = 'fa-circle-xmark text-danger';
+        return '<li class="list-group-item d-flex align-items-center justify-content-between">'
+          + '<span><i class="fas ' + icon + ' me-2"></i>' + esc(step.label || step.id) + '</span>'
+          + '<span class="text-muted small">' + esc(step.state || 'pending') + '</span>'
+          + '</li>';
+      }).join('');
+    }
+
+    if (progressLogEl) {
+      var lines = Array.isArray(job.log) ? job.log : [];
+      progressLogEl.innerHTML = lines.map(function(row) {
+        var ts = row.timestamp ? new Date(row.timestamp * 1000).toLocaleTimeString() : '';
+        return '<div><span class="text-muted small">[' + esc(ts) + ']</span> ' + esc(row.message || '') + '</div>';
+      }).join('');
+      progressLogEl.scrollTop = progressLogEl.scrollHeight;
+    }
+  }
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function watchJob(jobId) {
+    activeJobId = jobId;
+    stopPolling();
+    pollJob(jobId);
+    pollTimer = setInterval(function() { pollJob(activeJobId); }, 1200);
+  }
+
+  /* Jobs live in the shared store, so the analyser can be running for a run
+     started in another tab, or before this page was loaded. Pick that run up
+     rather than reporting "No active run" while the top bar shows it going. */
+  function adoptRunningJob() {
+    if (activeJobId) return;
+    var actions = buttons.map(function(btn) { return btn.dataset.action; });
+    fetch(SCRIPT_ROOT + '/pipeline/jobs')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.ok || activeJobId) return;
+        // Stalled ones are left alone: the badge already reports those, and
+        // this panel is about the run in progress. Adopting one would also
+        // poll a dead job every second for as long as the page stays open.
+        var mine = (data.jobs || []).filter(function(job) {
+          return actions.indexOf(job.action) !== -1 && !job.stale
+            && (job.status === 'running' || job.status === 'queued');
+        });
+        // Newest first, so the first match is the run in progress.
+        if (mine.length) watchJob(mine[0].id);
+      })
+      .catch(function() {
+        // Leave the modal as it is; the top bar still reports the job.
+      });
+  }
+
+  function pollJob(jobId) {
+    if (!jobId) return;
+    fetch(SCRIPT_ROOT + '/pipeline/run/' + encodeURIComponent(jobId))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.ok || !data.job) {
+          // Entries age out of the job store, and one cleared by hand goes the
+          // same way. Without stopping here the page would poll a job that no
+          // longer exists for as long as it stays open.
+          setStatus('warning', 'That run is no longer listed. Its entry was removed or aged out.');
+          activeJobId = null;
+          setBusy(false);
+          stopPolling();
+          return;
+        }
+        renderProgress(data.job);
+        if (data.job.status === 'completed') {
+          var result = data.job.result || {};
+          var detail = result.message || 'Action completed.';
+          detail += ' Incomplete today: ' + (result.total_incomplete_today || 0);
+          detail += ', hard rejected: ' + (result.hard_rejected || 0);
+          detail += ', summaries created: ' + (result.summary_created || 0);
+          if (typeof result.excluded_by_title === 'number') {
+            detail += ', excluded by title: ' + result.excluded_by_title;
+          }
+          if (typeof result.rejected_by_relevance === 'number') {
+            detail += ', rejected by relevance review: ' + result.rejected_by_relevance;
+          }
+          detail += '.';
+          setStatus('success', detail);
+          setBusy(false);
+          stopPolling();
+          window.setTimeout(function() {
+            window.location.reload();
+          }, 1200);
+        } else if (data.job.status === 'failed') {
+          setStatus('danger', 'Pipeline action failed: ' + (data.job.error || 'unknown error'));
+          setBusy(false);
+          stopPolling();
+        }
+      })
+      .catch(function(err) {
+        setStatus('danger', 'Pipeline status polling failed: ' + err);
+        setBusy(false);
+        stopPolling();
+      });
+  }
+
+  // Only the Start analyser buttons. Progress stays clickable whatever is
+  // going on: with nothing to show it goes looking for a run to follow.
+  function setBusy(busy) {
+    buttons.forEach(function(btn) {
+      btn.disabled = busy;
+    });
+  }
+
+  buttons.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var action = btn.dataset.action || '';
+      if (!action) return;
+      setBusy(true);
+      setStatus('info', 'Running analyser action: ' + action + '...');
+      fetch(SCRIPT_ROOT + '/pipeline/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+        },
+        body: JSON.stringify({action: action}),
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.ok) {
+          setStatus('danger', 'Pipeline action failed: ' + (data.error || 'unknown error'));
+          setBusy(false);
+          return;
+        }
+        if (window.zsazsaJobsChanged) zsazsaJobsChanged();
+        setStatus('info', 'Running analyser action: ' + action + '. Open Progress to view current and remaining steps.');
+        watchJob(data.job_id);
+      })
+      .catch(function(err) {
+        setStatus('danger', 'Pipeline request failed: ' + err);
+        setBusy(false);
+      });
+    });
+  });
+
+  if (openProgressBtn) {
+    openProgressBtn.addEventListener('click', function() {
+      if (activeJobId) {
+        pollJob(activeJobId);
+      } else {
+        adoptRunningJob();
+      }
+    });
+  }
+
+  adoptRunningJob();
+})();
+</script>
+
+<script>
+// Lazy-load the data-heavy dashboard sections and the pipeline panel stats so
+// the action bar paints immediately. One request to /dashboard/widgets returns
+// the rendered content fragment plus the pipeline status.
+(function() {
+  var mount = document.getElementById('dashboard-data');
+  var healthEl = document.getElementById('pipeline-health');
+  var statsEl = document.getElementById('pipeline-stats-mount');
+
+  function humanizeMinutes(mins) {
+    if (mins === null || mins === undefined) return 'never';
+    if (mins < 60) return mins + 'm ago';
+    if (mins < 1440) return Math.round(mins / 60) + 'h ago';
+    return Math.round(mins / 1440) + 'd ago';
+  }
+
+  function renderPipeline(p) {
+    if (!p) return;
+    if (healthEl) {
+      if (p.has_run && !p.stale) {
+        healthEl.innerHTML = '<span class="pipeline-dot text-success">Healthy</span>';
+      } else if (p.has_run && p.stale) {
+        healthEl.innerHTML = '<span class="pipeline-dot text-warning" style="--accent-green: var(--accent-orange);">Stale</span>';
+      } else {
+        healthEl.innerHTML = '<span class="text-muted small">No runs yet</span>';
+      }
+    }
+    if (statsEl) {
+      var pr = p.processed_24h || {};
+      var errors = (pr.http_error || 0) + (pr.no_content || 0) + (pr.error || 0);
+      var lastRun = p.has_run ? humanizeMinutes(p.minutes_since) : 'never';
+      var pending = (p.pending === null || p.pending === undefined) ? '-' : p.pending;
+      statsEl.innerHTML =
+        '<div class="pipeline-stat"><span class="label">Last run</span>'
+        + '<span class="value" title="' + (p.last_run_title || '') + '">' + lastRun + '</span></div>'
+        + '<div class="pipeline-stat"><span class="label">Pending</span><span class="value">' + pending + '</span></div>'
+        + '<div class="pipeline-stat"><span class="label">Processed 24h</span><span class="value">' + (p.total_24h || 0) + '</span></div>'
+        + '<div class="pipeline-stat full"><span class="sub">' + (pr.product_created || 0) + ' product, '
+        + (pr.not_relevant || 0) + ' skipped, ' + errors + ' errors</span></div>';
+    }
+  }
+
+  fetch(SCRIPT_ROOT + '/dashboard/widgets')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (mount && data.html) mount.innerHTML = data.html;
+      renderPipeline(data.pipeline);
+      // Native title tooltips on chart bars are fine; init Bootstrap tooltips
+      // for any info icons that arrived with the fragment.
+      if (mount) {
+        mount.querySelectorAll('[data-bs-toggle="tooltip"], .analyser-info-icon').forEach(function(el) {
+          new bootstrap.Tooltip(el, {trigger: 'hover focus'});
+        });
+      }
+    })
+    .catch(function(err) {
+      if (mount) {
+        mount.innerHTML = '<div class="alert alert-warning">Could not load dashboard data: ' + err + '</div>';
+      }
+    });
+})();
+</script>
+{% endblock %}

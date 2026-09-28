@@ -1,0 +1,33 @@
+x-zsazsa: &zsazsa
+  build: .
+  image: zsazsa-local
+  restart: unless-stopped
+  working_dir: /app
+  volumes: ["./:/app"]
+  environment:
+    - SECRET_KEY=${ZSAZSA_SECRET_KEY}
+  extra_hosts: ["host.docker.internal:host-gateway"]   # for a local Ollama on the host
+  networks: [default, misp]
+
+services:
+  zsazsa:
+    <<: *zsazsa
+    ports: ["192.168.91.132:5000:5000"]
+    depends_on: [jobs-redis]
+
+  analyser:
+    <<: *zsazsa
+    command: sh -c 'while true; do python run_analyser.py; sleep 3600; done'
+
+  imap:
+    <<: *zsazsa
+    command: sh -c 'while true; do python run_imap_collector.py; sleep 900; done'
+
+  jobs-redis:
+    image: valkey/valkey:7.2
+    restart: unless-stopped
+
+networks:
+  misp:
+    external: true
+    name: misp-docker_default

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ gir.gir_id }} scope preview | zsazsa CTI{% endblock %}
+{% block page_title %}Scope preview &mdash; <span class="req-id-badge ms-1">{{ gir.gir_id }}</span>{% endblock %}
+
+{% block misp_object_url %}{{ gir.misp_url }}{% endblock %}
+{% block topbar_actions %}{% endblock %}
+
+{% block content %}
+
+<div class="alert alert-info small">
+  <strong>What this shows.</strong> A fast keyword check of the current scope items
+  against the latest collected events. Use it to sanity-check whether the GIR scope
+  would have surfaced anything from collection. The analyser's LLM relevance check
+  may filter or extend this set.
+</div>
+
+{% include "requirements/_scope_matches.html" %}
+
+{% endblock %}

@@ -1,0 +1,2842 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration · zsazsa CTI{% endblock %}
+{% block page_title %}Configuration{% endblock %}
+
+{% macro token_usage(u) %}
+  <div class="border-top pt-3 mb-3">
+    <div class="mb-2">
+      <span class="text-muted small fw-semibold"><i class="fas fa-chart-bar me-1"></i>Token usage</span>
+    </div>
+    <div>
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        <span class="badge bg-secondary">Today: {{ u.today_tokens }} tokens ({{ u.today_calls }} calls)</span>
+        <span class="badge bg-secondary">Last 7d: {{ u.week_tokens }} tokens ({{ u.week_calls }} calls)</span>
+        <span class="badge bg-primary">All time: {{ u.total_tokens }} tokens ({{ u.total_calls }} calls)</span>
+      </div>
+      {% if u.by_feature %}
+      <table class="table table-sm table-borderless mb-0" style="width:auto">
+        <thead>
+          <tr>
+            <th class="text-muted small py-1 pe-3">Feature</th>
+            <th class="text-end text-muted small py-1 pe-3">Calls</th>
+            <th class="text-end text-muted small py-1 pe-3">Input</th>
+            <th class="text-end text-muted small py-1 pe-3">Output</th>
+            <th class="text-end text-muted small py-1">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in u.by_feature %}
+          <tr>
+            <td class="text-muted small py-1 pe-3">{{ f.feature }}</td>
+            <td class="text-end small py-1 pe-3">{{ f.calls }}</td>
+            <td class="text-end small py-1 pe-3">{{ f.input_tokens }}</td>
+            <td class="text-end small py-1 pe-3">{{ f.output_tokens }}</td>
+            <td class="text-end small py-1 fw-semibold">{{ f.total_tokens }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <span class="text-muted small">No usage recorded yet.</span>
+      {% endif %}
+    </div>
+  </div>
+{% endmacro %}
+
+{% block content %}
+<form method="post" id="cfg-form">
+  <input type="hidden" name="active_tab" id="cfg-active-tab-input" value="{{ active_tab }}">
+
+  <ul class="nav nav-tabs mb-4" id="cfg-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ 'active' if active_tab == 'tab-connections' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-connections" type="button" role="tab">
+        <i class="fas fa-plug me-1"></i> Connections
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ 'active' if active_tab == 'tab-products' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-products" type="button" role="tab">
+        <i class="fas fa-boxes-stacked me-1"></i> Products
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ 'active' if active_tab == 'tab-system' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-system" type="button" role="tab">
+        <i class="fas fa-gears me-1"></i> System
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ 'active' if active_tab == 'tab-prompts' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-prompts" type="button" role="tab">
+        <i class="fas fa-message me-1"></i> Prompts
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ 'active' if active_tab == 'tab-ai' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-ai" type="button" role="tab">
+        <i class="fas fa-robot me-1"></i> AI
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ 'active' if active_tab == 'tab-context' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-context" type="button" role="tab">
+        <i class="fas fa-tags me-1"></i> Context elements
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ 'active' if active_tab == 'tab-notifications' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-notifications" type="button" role="tab">
+        <i class="fas fa-bell me-1"></i> Notifications
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {{ 'active' if active_tab == 'tab-styling' else '' }}" data-bs-toggle="tab" data-bs-target="#tab-styling" type="button" role="tab">
+        <i class="fas fa-palette me-1"></i> Styling
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+
+
+    <!-- ── Connections tab ────────────────────────────────────────────── -->
+    <div class="tab-pane fade {{ 'show active' if active_tab == 'tab-connections' else '' }}" id="tab-connections" role="tabpanel">
+
+      <div class="d-flex justify-content-end mb-3">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-floppy-disk me-1"></i> Save configuration
+        </button>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-server me-2"></i>MISP webapp store</div>
+        <div class="card-body">
+          <div class="form-text mb-3">Stores stakeholders, PIRs, and GIRs.</div>
+          <div class="mb-3">
+            <label class="form-label">URL</label>
+            <input type="url" name="MISP_WEBAPP_URL" class="form-control font-monospace" value="{{ cfg.MISP_WEBAPP_URL }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">API key</label>
+            <div class="input-group">
+              <input type="password" name="MISP_WEBAPP_KEY" class="form-control font-monospace api-key-input" value="{{ cfg.MISP_WEBAPP_KEY }}">
+              <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide"><i class="fas fa-eye"></i></button>
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Verify TLS certificate</label>
+            <select name="MISP_WEBAPP_VERIFYCERT" class="form-select">
+              <option value="true" {{ 'selected' if cfg.MISP_WEBAPP_VERIFYCERT }}>Yes</option>
+              <option value="false" {{ 'selected' if not cfg.MISP_WEBAPP_VERIFYCERT }}>No</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-shield-halved me-2"></i>Rulezet</div>
+        <div class="card-body">
+          <div class="form-text mb-3">
+            Queried for public detection rules by CVE ID or MITRE ATT&amp;CK technique,
+            from the "Search Rulezet" buttons on the Vulnerability advisory, Threat actor
+            profile and Daily briefing forms. Also validates the draft rule of a Detection
+            engineering request, which cannot be marked Active without it. Leave empty to
+            disable the integration.
+          </div>
+          <div>
+            <label class="form-label">Instance URL</label>
+            <input type="url" name="RULEZET_URL" class="form-control font-monospace"
+                   placeholder="https://rulezet.org" value="{{ cfg.RULEZET_URL }}">
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Products tab ───────────────────────────────────────────────── -->
+    <div class="tab-pane fade {{ 'show active' if active_tab == 'tab-products' else '' }}" id="tab-products" role="tabpanel">
+
+      <div class="d-flex justify-content-end mb-3">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-floppy-disk me-1"></i> Save configuration
+        </button>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-boxes-stacked me-2"></i>Product types</div>
+        <div class="card-body">
+          <label class="form-label">Used for stakeholder subscriptions and PIR output format</label>
+          <textarea name="PRODUCT_TYPES" class="form-control font-monospace" rows="{{ [cfg.PRODUCT_TYPES | length + 2, 5] | max }}"
+            placeholder="One product type per line">{{ cfg.PRODUCT_TYPES | join('\n') }}</textarea>
+          <div class="form-text">One entry per line. Shared between stakeholder subscriptions and PIR deliverables.</div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-filter me-2"></i>Daily briefing story title exclusions</div>
+        <div class="card-body">
+          <label class="form-label">Exclude stories with this in the title</label>
+          <textarea name="DAILY_BRIEFING_TITLE_EXCLUSIONS" class="form-control font-monospace" rows="{{ [cfg.DAILY_BRIEFING_TITLE_EXCLUSIONS | length + 2, 5] | max }}"
+            placeholder="One pattern per line">{{ cfg.DAILY_BRIEFING_TITLE_EXCLUSIONS | join('\n') }}</textarea>
+          <div class="form-text">One entry per line. Matching is case-insensitive and checks event titles and report titles.</div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-bullseye me-2"></i>Focus points (organisation-wide)</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Geographies</label>
+              <textarea name="FOCUS_POINTS_GEOGRAPHIES" class="form-control font-monospace" rows="{{ [cfg.FOCUS_POINTS_GEOGRAPHIES | length + 2, 4] | max }}"
+                placeholder="One geography per line">{{ cfg.FOCUS_POINTS_GEOGRAPHIES | join('\n') }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Sectors</label>
+              <textarea name="FOCUS_POINTS_SECTORS" class="form-control font-monospace" rows="{{ [cfg.FOCUS_POINTS_SECTORS | length + 2, 4] | max }}"
+                placeholder="One sector per line">{{ cfg.FOCUS_POINTS_SECTORS | join('\n') }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Technologies</label>
+              <textarea name="FOCUS_POINTS_TECHNOLOGIES" class="form-control font-monospace" rows="{{ [cfg.FOCUS_POINTS_TECHNOLOGIES | length + 2, 4] | max }}"
+                placeholder="One technology per line">{{ cfg.FOCUS_POINTS_TECHNOLOGIES | join('\n') }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Threat types</label>
+              <textarea name="FOCUS_POINTS_THREAT_TYPES" class="form-control font-monospace" rows="{{ [cfg.FOCUS_POINTS_THREAT_TYPES | length + 2, 4] | max }}"
+                placeholder="One threat type per line">{{ cfg.FOCUS_POINTS_THREAT_TYPES | join('\n') }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Threat actors</label>
+              <textarea name="FOCUS_POINTS_THREAT_ACTORS" class="form-control font-monospace" rows="{{ [cfg.FOCUS_POINTS_THREAT_ACTORS | length + 2, 4] | max }}"
+                placeholder="One threat actor per line">{{ cfg.FOCUS_POINTS_THREAT_ACTORS | join('\n') }}</textarea>
+            </div>
+          </div>
+          <div class="form-text mt-2">These focus points are global and used by AI-assisted briefing/relevance flows. One entry per line.</div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-user-secret me-2"></i>Threat actor types</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="add-tat-btn">
+            <i class="fas fa-plus me-1"></i>Add type
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <input type="hidden" name="THREAT_ACTOR_TYPES" id="tat-json">
+          <table class="table mb-0" id="tat-table">
+            <thead class="table-light">
+              <tr>
+                <th style="width:22%;padding:.5rem .75rem;">Name</th>
+                <th style="padding:.5rem .75rem;">Description</th>
+                <th style="width:2.5rem;"></th>
+              </tr>
+            </thead>
+            <tbody id="tat-tbody"></tbody>
+          </table>
+        </div>
+        <div class="card-footer text-muted small">
+          Threat actor taxonomy based on ENISA categories. Add your own types as needed.
+          Available to all CTI products: daily briefing, flash intel, vulnerability advisory.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── System tab ─────────────────────────────────────────────────── -->
+    <div class="tab-pane fade {{ 'show active' if active_tab == 'tab-system' else '' }}" id="tab-system" role="tabpanel">
+
+      <div class="d-flex justify-content-end mb-3">
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-floppy-disk me-1"></i> Save configuration
+        </button>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-share-nodes me-2"></i>MISP event distribution</div>
+        <div class="card-body">
+          <label class="form-label">Distribution for events zsazsa creates</label>
+          <select name="MISP_EVENT_DISTRIBUTION" class="form-select">
+            <option value="0" {{ 'selected' if cfg.MISP_EVENT_DISTRIBUTION == 0 }}>Your organisation only (default)</option>
+            <option value="1" {{ 'selected' if cfg.MISP_EVENT_DISTRIBUTION == 1 }}>This community only</option>
+            <option value="2" {{ 'selected' if cfg.MISP_EVENT_DISTRIBUTION == 2 }}>Connected communities</option>
+            <option value="3" {{ 'selected' if cfg.MISP_EVENT_DISTRIBUTION == 3 }}>All communities</option>
+          </select>
+          <div class="alert alert-warning mt-3 mb-0" role="alert">
+            <i class="fas fa-triangle-exclamation me-1"></i>
+            <strong>Use with care.</strong> This sets who can see the stakeholders, requirements,
+            RFIs and products zsazsa stores in MISP. Anything above <em>Your organisation only</em>
+            can push this internal CTI programme data to other organisations or communities through
+            MISP synchronisation, and that sharing cannot be undone once events have propagated.
+            Only change this if you understand your MISP sharing topology. It applies to newly
+            created events; existing events keep their current distribution.
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-gears me-2"></i>Analyser</div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Poll window (hours)</label>
+            <input type="number" name="POLL_WINDOW_HOURS" class="form-control" value="{{ cfg.POLL_WINDOW_HOURS }}" min="1" max="168">
+            <div class="form-text">How far back to look for new scraper events on each run.</div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Event log retention (days)</label>
+              <input type="number" name="EVENT_LOG_RETENTION_DAYS" class="form-control" value="{{ cfg.EVENT_LOG_RETENTION_DAYS }}" min="1">
+              <div class="form-text">Recent pipeline activity entries older than this are pruned automatically.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Run log retention (days)</label>
+              <input type="number" name="PIPELINE_RUN_LOG_RETENTION_DAYS" class="form-control" value="{{ cfg.PIPELINE_RUN_LOG_RETENTION_DAYS }}" min="1">
+              <div class="form-text">Analyser run history entries older than this are pruned automatically.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-file-lines me-2"></i>Logging</div>
+        <div class="card-body">
+          <label class="form-label">Log level</label>
+          <select name="LOG_LEVEL" class="form-select">
+            {% for level in ['DEBUG', 'INFO', 'WARNING', 'ERROR'] %}
+            <option value="{{ level }}" {{ 'selected' if cfg.LOG_LEVEL == level }}>{{ level }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-globe me-2"></i>Web server</div>
+        <div class="card-body">
+          <div class="row g-3 mb-3">
+            <div class="col-md-8">
+              <label class="form-label">Hostname</label>
+              <input type="text" name="HOSTNAME" class="form-control font-monospace"
+                     value="{{ cfg.HOSTNAME }}"
+                     placeholder="zsazsa.example.com or 192.168.1.10">
+              <div class="form-text">DNS name or IP address used to reach this instance. Used in generated links.</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Port</label>
+              <input type="number" name="PORT" class="form-control" value="{{ cfg.PORT }}"
+                     min="1" max="65535">
+              <div class="form-text">TCP port the application listens on.</div>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="mb-3">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="SSL_ENABLED" id="ssl_enabled"
+                     value="true" {{ 'checked' if cfg.SSL_ENABLED }}>
+              <label class="form-check-label" for="ssl_enabled">Enable SSL / HTTPS</label>
+            </div>
+            <div class="form-text">
+              Enable only when zsazsa terminates TLS itself. Leave off if a reverse proxy (nginx, Caddy)
+              handles HTTPS in front of this application.
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">SSL certificate path</label>
+              <input type="text" name="SSL_CERT" class="form-control font-monospace"
+                     value="{{ cfg.SSL_CERT }}" placeholder="certs/zsazsa.crt">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SSL private key path</label>
+              <input type="text" name="SSL_KEY" class="form-control font-monospace"
+                     value="{{ cfg.SSL_KEY }}" placeholder="certs/zsazsa.key">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-right-to-bracket me-2"></i>Single sign-on</div>
+        <div class="card-body">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="MISP_SESSION_REDIRECT_TO_LOGIN" id="misp_session_redirect_to_login"
+                   value="true" {{ 'checked' if cfg.MISP_SESSION_REDIRECT_TO_LOGIN }}>
+            <label class="form-check-label" for="misp_session_redirect_to_login">Require a MISP session</label>
+          </div>
+          <div class="form-text">
+            zsazsa identifies the current user from MISP's own session cookie, which only works when
+            zsazsa is deployed as a subpath behind MISP (e.g. <code>/zsazsa/</code>) so the browser
+            sends MISP's session cookie along with requests. When enabled, visitors without a valid
+            MISP session are redirected to MISP's login page. When disabled, requests without a MISP
+            session fall back to the <code>admin@admin.test</code> identity used throughout zsazsa.
+          </div>
+
+          <div class="alert alert-info d-flex align-items-start gap-2 mt-3 mb-0" role="alert">
+            <i class="fas fa-circle-info mt-1"></i>
+            <div>
+              MISP usually names its session cookie <code>MISP-&lt;instance&nbsp;uuid&gt;</code>, which is unique to
+              each MISP install. You do not normally need to set this by hand: when you enable single sign-on
+              and save, zsazsa detects it from the connected MISP server and stores it in
+              <code>MISP_SESSION_COOKIE_NAME</code>. The name comes from MISP's own configuration though, and
+              installs that leave it at the CakePHP default send <code>CAKEPHP</code> instead. Use the check
+              below to see what your browser actually sends, and set the name by hand if it differs.
+              <div class="mt-2">
+                Session cookie in use:
+                {% if cfg.MISP_SESSION_COOKIE_NAME %}
+                  <code>{{ cfg.MISP_SESSION_COOKIE_NAME }}</code>
+                {% else %}
+                  <span class="text-muted">not detected yet. Enable single sign-on and save to detect it from MISP.</span>
+                {% endif %}
+              </div>
+              <div class="mt-3 d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="test-sso-btn">
+                  <i class="fas fa-stethoscope me-1"></i>Test single sign-on
+                </button>
+                <span class="small text-muted">Checks this request against MISP's session.</span>
+              </div>
+              <div id="test-sso-result" class="mt-2 small"></div>
+            </div>
+          </div>
+
+          <hr>
+
+          <div class="form-text mb-3">
+            zsazsa reads the logged-in user from MISP's PHP session, which it expects to find in
+            Redis. That only works when PHP is configured to put it there, with
+            <code>session.save_handler = redis</code> and a <code>session.save_path</code> pointing at
+            the instance below. Leave username and password empty if Redis requires no authentication.
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label">Redis host</label>
+              <input type="text" name="MISP_SESSION_REDIS_HOST" class="form-control font-monospace"
+                     value="{{ cfg.MISP_SESSION_REDIS_HOST }}" placeholder="127.0.0.1">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Port</label>
+              <input type="number" name="MISP_SESSION_REDIS_PORT" class="form-control"
+                     value="{{ cfg.MISP_SESSION_REDIS_PORT }}" min="1" max="65535">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Database index</label>
+              <input type="number" name="MISP_SESSION_REDIS_DB" class="form-control"
+                     value="{{ cfg.MISP_SESSION_REDIS_DB }}" min="0">
+            </div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Username <span class="text-muted">(optional)</span></label>
+              <input type="text" name="MISP_SESSION_REDIS_USERNAME" class="form-control font-monospace"
+                     value="{{ cfg.MISP_SESSION_REDIS_USERNAME }}" placeholder="leave empty if not used">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Password <span class="text-muted">(optional)</span></label>
+              <div class="input-group">
+                <input type="password" name="MISP_SESSION_REDIS_PASSWORD" class="form-control font-monospace api-key-input"
+                       value="{{ cfg.MISP_SESSION_REDIS_PASSWORD }}" placeholder="leave empty if not used">
+                <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide"><i class="fas fa-eye"></i></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Migration ──────────────────────────────────────────────────── -->
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-database me-2"></i>Migration</div>
+        <div class="card-body">
+          <div class="form-text mb-3">
+            One-off maintenance scripts that update existing data in MISP. Run a preview
+            (dry-run) first to see what would change, then run the migration to apply it.
+          </div>
+          {% for m in migrations %}
+          <div class="migration-row border rounded p-3 {{ 'mt-3' if not loop.first }}" data-migration-id="{{ m.id }}">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+              <div>
+                <div class="fw-semibold">{{ m.name }}</div>
+                <div class="form-text mt-1">{{ m.description }}</div>
+                <div class="form-text mt-1">Script: <code>{{ m.script }}</code></div>
+              </div>
+              <div class="btn-group ms-auto flex-shrink-0">
+                <button type="button" class="btn btn-outline-secondary btn-sm migration-preview">
+                  <i class="fas fa-eye me-1"></i>Preview (dry-run)
+                </button>
+                {% if m.supports_apply %}
+                <button type="button" class="btn btn-outline-primary btn-sm migration-run">
+                  <i class="fas fa-play me-1"></i>Run migration
+                </button>
+                {% endif %}
+              </div>
+            </div>
+            <pre class="migration-output bg-body-secondary border rounded mt-3 p-2 small mb-0 d-none" style="max-height: 320px; overflow:auto; white-space: pre-wrap;"></pre>
+          </div>
+          {% else %}
+          <div class="form-text">No migrations available.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Prompts tab ──────────────────────────────────────────────────── -->
+    <div class="tab-pane fade {{ 'show active' if active_tab == 'tab-prompts' else '' }}" id="tab-prompts" role="tabpanel">
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="text-muted small mb-0">
+          Prompt templates used by the LLM-assisted features. Files are stored in the <code>zsazsaprompts/</code> directory.
+        </p>
+        <button class="btn btn-primary" id="save-prompts-btn" type="button">
+          <i class="fas fa-floppy-disk me-1"></i> Save all prompts
+        </button>
+      </div>
+
+      <div id="prompt-save-alert" class="alert d-none mb-3" role="alert"></div>
+
+      <div class="alert alert-warning small mb-3" role="alert">
+        <i class="fas fa-triangle-exclamation me-1"></i>
+        Two prompts have output format dependencies that the application parses back into structured data.
+        Changing these headings will cause silent failures.
+        <ul class="mb-0 mt-1">
+          <li><code>summarise_misp_report</code>: must output <code>**Targeted sector:**</code>, <code>**Geographic scope:**</code>, <code>**MITRE ATT&CK techniques:**</code>, <code>**Threat actor:**</code>, and <code>**Vendor/Technology:**</code>. The analyser uses these to apply MISP galaxy tags to source events and populate briefing story scope fields.</li>
+          <li><code>flash_intel_generate</code>: must follow the full section and field structure shown in the template. The "Generate AI draft" feature parses the output line by line to populate FIA form fields.</li>
+        </ul>
+      </div>
+
+      <div class="accordion mb-3" id="prompt-accordion">
+        {% for p in cfg.prompts %}
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="prompt-acc-heading-{{ loop.index }}">
+            <button class="accordion-button collapsed" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#prompt-acc-{{ loop.index }}"
+                    aria-expanded="false" aria-controls="prompt-acc-{{ loop.index }}">
+              <i class="fas fa-file-lines me-2"></i>
+              <code style="font-size:.85rem;">{{ p.filename }}</code>
+              {% if p.description %}
+              <span class="text-muted small ms-2">- {{ p.description }}</span>
+              {% endif %}
+            </button>
+          </h2>
+          <div id="prompt-acc-{{ loop.index }}" class="accordion-collapse collapse"
+               aria-labelledby="prompt-acc-heading-{{ loop.index }}"
+               data-bs-parent="#prompt-accordion">
+            <div class="accordion-body p-2">
+              <textarea class="form-control font-monospace prompt-textarea"
+                        data-filename="{{ p.filename }}"
+                        rows="{{ [p.content.count('\n') + 3, 6] | max }}"
+                        style="font-size:.82rem;">{{ p.content }}</textarea>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="card content-card mb-3">
+        <div class="card-header"><i class="fas fa-plus me-2"></i>New prompt file</div>
+        <div class="card-body">
+          <div class="mb-2">
+            <label class="form-label small mb-1">Filename <span class="text-muted">(without .md extension)</span></label>
+            <input type="text" id="new-prompt-name" class="form-control form-control-sm font-monospace"
+                   placeholder="my_new_prompt">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">Content</label>
+            <textarea id="new-prompt-content" class="form-control font-monospace" rows="6"
+                      style="font-size:.82rem;" placeholder="You are a CTI analyst…"></textarea>
+          </div>
+          <button class="btn btn-sm btn-outline-primary" id="add-prompt-btn" type="button">
+            <i class="fas fa-plus me-1"></i>Create prompt file
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── AI tab ────────────────────────────────────────────────────────── -->
+    <div class="tab-pane fade {{ 'show active' if active_tab == 'tab-ai' else '' }}" id="tab-ai" role="tabpanel">
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="text-muted small mb-0">
+          Configure the LLM provider, model, temperature and prompt for each AI-assisted feature.
+          Empty model and temperature fields fall back to the provider's default model and the model's
+          own temperature. Low temperatures keep the strictly parsed output of these features stable.
+        </p>
+        <button class="btn btn-primary ms-3 flex-shrink-0" id="save-ai-btn" type="button">
+          <i class="fas fa-floppy-disk me-1"></i> Save configuration
+        </button>
+      </div>
+
+      <div id="ai-save-alert" class="alert d-none mb-3" role="alert"></div>
+
+      <div class="card content-card mb-3">
+        <div class="card-header"><i class="fas fa-robot me-2"></i>LLM providers</div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Enable the providers you want available and mark one as the default. The default provider
+            is used by every feature that does not select one itself.
+          </p>
+          <input type="hidden" id="llm-default-provider" value="{{ cfg.LLM_DEFAULT_PROVIDER }}">
+          {% set local_is_default = cfg.LLM_DEFAULT_PROVIDER == 'local' %}
+
+          <div class="accordion" id="llm-providers-accordion">
+
+            <div class="accordion-item">
+              <h2 class="accordion-header d-flex align-items-center">
+                <button class="accordion-button flex-grow-1 w-auto {{ 'collapsed' if local_is_default }}" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#llm-provider-openai">
+                  <i class="fas fa-cloud me-2"></i>OpenAI
+                </button>
+                <div class="d-flex align-items-center gap-3 px-3 flex-shrink-0 fs-6 fw-normal">
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="llm-openai-enabled"
+                           {{ 'checked' if cfg.OPENAI_ENABLED }}>
+                    <label class="form-check-label small" for="llm-openai-enabled">Enabled</label>
+                  </div>
+                  <button type="button" class="btn btn-sm llm-default-btn" data-provider="openai">
+                    <i class="fas fa-star me-1"></i>Default provider
+                  </button>
+                </div>
+              </h2>
+              <div id="llm-provider-openai" class="accordion-collapse collapse {{ 'show' if not local_is_default }}">
+                <div class="accordion-body">
+                  <div class="mb-3">
+                    <label class="form-label">API key</label>
+                    <div class="input-group">
+                      <input type="password" id="llm-openai-key" class="form-control font-monospace api-key-input" value="{{ cfg.OPENAI_API_KEY }}">
+                      <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide"><i class="fas fa-eye"></i></button>
+                    </div>
+                  </div>
+                  {{ token_usage(cfg.llm_usage) }}
+                  <div class="border-top pt-3">
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <label class="form-label small mb-1">Default model</label>
+                        <input type="text" id="ai-default-model" class="form-control font-monospace"
+                               value="{{ cfg.OPENAI_MODEL }}" placeholder="gpt-4o-mini">
+                        <div class="form-text">Used by any feature whose model field is left empty.</div>
+                      </div>
+                    </div>
+                    <div class="alert alert-info small py-2 mb-0 mt-3">
+                      <i class="fas fa-circle-info me-1"></i>
+                      Reasoning models (the <code>o</code>-series, e.g. <code>o4-mini</code>) are supported, but they
+                      spend part of their token budget on internal reasoning before producing output. The per-feature
+                      token limits in this app are tuned for standard chat models, so a reasoning model may exhaust its
+                      budget and return empty or truncated output. Use them only where you know the limit is generous
+                      enough; otherwise prefer a <code>gpt-4o</code>-family model.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="accordion-item">
+              <h2 class="accordion-header d-flex align-items-center">
+                <button class="accordion-button flex-grow-1 w-auto {{ 'collapsed' if not local_is_default }}" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#llm-provider-local">
+                  <i class="fas fa-server me-2"></i>Local LLM
+                </button>
+                <div class="d-flex align-items-center gap-3 px-3 flex-shrink-0 fs-6 fw-normal">
+                  <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="llm-local-enabled"
+                           {{ 'checked' if cfg.LOCAL_LLM_ENABLED }}>
+                    <label class="form-check-label small" for="llm-local-enabled">Enabled</label>
+                  </div>
+                  <button type="button" class="btn btn-sm llm-default-btn" data-provider="local">
+                    <i class="fas fa-star me-1"></i>Default provider
+                  </button>
+                </div>
+              </h2>
+              <div id="llm-provider-local" class="accordion-collapse collapse {{ 'show' if local_is_default }}">
+                <div class="accordion-body">
+                  <div class="mb-3">
+                    <label class="form-label">Network location</label>
+                    <input type="url" id="llm-local-url" class="form-control font-monospace"
+                           value="{{ cfg.LOCAL_LLM_URL }}" placeholder="http://127.0.0.1:11434/v1">
+                    <div class="form-text">Base URL of the OpenAI-compatible API endpoint.</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label">API key</label>
+                    <div class="input-group">
+                      <input type="password" id="llm-local-key" class="form-control font-monospace api-key-input" value="{{ cfg.LOCAL_LLM_API_KEY }}">
+                      <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide"><i class="fas fa-eye"></i></button>
+                    </div>
+                    <div class="form-text">Leave empty if the endpoint does not require authentication.</div>
+                  </div>
+                  {{ token_usage(cfg.llm_usage_local) }}
+                  <div class="border-top pt-3">
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <label class="form-label small mb-1">Default model</label>
+                        <input type="text" id="llm-local-model" class="form-control font-monospace"
+                               value="{{ cfg.LOCAL_LLM_MODEL }}" placeholder="llama3.1:8b">
+                        <div class="form-text">Used by any feature whose model field is left empty.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-list me-2"></i>Feature configuration</div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0 align-middle" id="ai-features-table">
+            <thead class="table-light">
+              <tr>
+                <th style="width:28%">Feature</th>
+                <th style="width:13%">Provider</th>
+                <th style="width:18%">Model</th>
+                <th style="width:8%">Temp.</th>
+                <th style="width:33%">Prompt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for fid, feat in cfg.ai_features.items() %}
+              <tr data-feature-id="{{ fid }}">
+                <td class="py-2 ps-3">
+                  <div class="fw-semibold small">
+                    {{ feat.label }}
+                    {% if fid == 'summarise_report' %}
+                    <i class="fas fa-circle-info text-warning ms-1" data-bs-toggle="tooltip" data-bs-placement="right"
+                       title="Format dependency: the prompt output must include **Targeted sector:**, **Geographic scope:**, and **MITRE ATT&CK techniques:** headings. The analyser parses these to apply MISP galaxy tags. Changing them will silently break tagging."></i>
+                    {% elif fid in ('generate_fia_draft', 'generate_flash_intel') %}
+                    <i class="fas fa-circle-info text-warning ms-1" data-bs-toggle="tooltip" data-bs-placement="right"
+                       title="Format dependency: the prompt output must follow the full section and field structure in the template. The application parses it line by line to populate FIA form fields. Changing the structure will silently break field extraction."></i>
+                    {% endif %}
+                  </div>
+                  <div class="text-muted" style="font-size:.78rem;">{{ feat.description }}</div>
+                </td>
+                <td>
+                  <select class="form-select form-select-sm ai-provider-select">
+                    <option value="openai" {% if feat.provider != 'local' %}selected{% endif %}>OpenAI</option>
+                    <option value="local" {% if feat.provider == 'local' %}selected{% endif %}>Local LLM</option>
+                  </select>
+                </td>
+                <td>
+                  <input type="text" class="form-control form-control-sm font-monospace ai-model-input"
+                         placeholder="{{ cfg.LOCAL_LLM_MODEL if feat.provider == 'local' else cfg.OPENAI_MODEL }}"
+                         value="{{ feat.model }}">
+                </td>
+                <td>
+                  <input type="number" class="form-control form-control-sm ai-temperature-input"
+                         min="0" max="2" step="0.1" placeholder="model"
+                         value="{{ feat.temperature if feat.temperature is not none else '' }}"
+                         title="Sampling temperature. Leave empty to use whatever the model or provider defaults to. Low values (0 to 0.2) keep structured output stable.">
+                </td>
+                <td>
+                  <select class="form-select form-select-sm ai-prompt-select">
+                    {% for p in cfg.prompts %}
+                    <option value="{{ p.filename }}"
+                      {% if p.filename == feat.prompt %}selected{% endif %}>
+                      {{ p.filename }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                  {% if feat.prompt not in cfg.prompts | map(attribute='filename') | list %}
+                  <div class="text-warning small mt-1">
+                    <i class="fas fa-triangle-exclamation me-1"></i>
+                    Configured file <code>{{ feat.prompt }}</code> not found in zsazsaprompts/
+                  </div>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="alert alert-warning small py-2">
+        <i class="fas fa-triangle-exclamation me-1"></i>
+        <strong>Prompt injection risk.</strong>
+        AI features send raw MISP event content (titles, report text, attribute values) to the configured LLM.
+        An adversary who can write to a connected MISP instance could craft event content to manipulate AI-generated drafts.
+        Only connect to MISP servers you trust, and review all AI-generated output before publishing or acting on it.
+      </div>
+
+    </div>
+
+    <!-- ── Context elements tab ───────────────────────────────────────────── -->
+    <div class="tab-pane fade {{ 'show active' if active_tab == 'tab-context' else '' }}" id="tab-context" role="tabpanel">
+    {% set misp_browse_base = cfg.MISP_WEBAPP_URL or cfg.MISP_URL %}
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="text-muted small mb-0">
+          MISP tags used by zsazsa. The <code>zsazsa</code> namespace is custom and must exist on
+          your MISP instance. Edit the tag strings below if you need to align with a different
+          taxonomy layout, then save.
+        </p>
+        <button type="submit" class="btn btn-primary ms-3 flex-shrink-0">
+          <i class="fas fa-floppy-disk me-1"></i> Save configuration
+        </button>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-tag me-2"></i>Entity type markers</div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Every zsazsa object stored in MISP carries a <code>zsazsa:type</code> tag so the
+            application can retrieve it by type.
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Stakeholder</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_STAKEHOLDER" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_STAKEHOLDER }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_STAKEHOLDER | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Priority Intelligence Requirement (PIR)</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_PIR" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_PIR }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_PIR | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">General Intelligence Requirement (GIR)</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_GIR" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_GIR }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_GIR | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Request for Information (RFI)</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_RFI" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_RFI }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_RFI | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-boxes-stacked me-2"></i>Product classification</div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Published CTI products carry a <code>zsazsa:ctiproduct</code> tag. This tag serves as
+            both the type marker and the product label for filtering in the Products catalogue.
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Flash Intel Alert</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_FLASH_INTEL" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_FLASH_INTEL }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_FLASH_INTEL | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Vulnerability advisory</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_VEA" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_VEA }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_VEA | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Daily Threat Briefing</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_BRIEFING" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_BRIEFING }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_BRIEFING | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Threat Landscape Report</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_TLR" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_TLR }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_TLR | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Threat actor profile</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_THREAT_ACTOR_PROFILE" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_THREAT_ACTOR_PROFILE }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_THREAT_ACTOR_PROFILE | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Indicator feed</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_INDICATOR_FEED" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_INDICATOR_FEED }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_INDICATOR_FEED | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Detection engineering request</label>
+              <div class="input-group input-group-sm">
+                <input type="text" name="TAG_DETECTION_ENG" class="form-control form-control-sm font-monospace" value="{{ cfg.TAG_DETECTION_ENG }}">
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_DETECTION_ENG | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-spider me-2"></i>Scraper source marking</div>
+        <div class="card-body">
+          <label class="form-label">Scraper marker tag</label>
+          <div class="input-group">
+            <input type="text" name="SCRAPER_MARKER_TAG" class="form-control font-monospace" value="{{ cfg.SCRAPER_MARKER_TAG }}">
+            {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.SCRAPER_MARKER_TAG | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+          </div>
+          <div class="form-text">
+            The analyser only processes MISP events that carry this tag. The misp-scraper service
+            applies it when it ingests events.
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-database me-2"></i>Collection workflow</div>
+        <div class="card-body">
+          <label class="form-label">Follow-up flag tag</label>
+          <div class="input-group">
+            <input type="text" name="TAG_COLLECTION_FOLLOWUP" class="form-control font-monospace" value="{{ cfg.TAG_COLLECTION_FOLLOWUP }}">
+            {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_COLLECTION_FOLLOWUP | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+          </div>
+          <div class="form-text">
+            Added as a <strong>local</strong> tag when an analyst flags an event for follow-up from the data-collection page.
+          </div>
+
+          <label class="form-label mt-3">Dismissed event tag</label>
+          <div class="input-group">
+            <input type="text" name="TAG_COLLECTION_DISMISSED" class="form-control font-monospace" value="{{ cfg.TAG_COLLECTION_DISMISSED }}">
+            {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:{{ cfg.TAG_COLLECTION_DISMISSED | replace('"', '%22') }}" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+          </div>
+          <div class="form-text">
+            Added as a <strong>local</strong> tag when an analyst dismisses an event coming from another MISP server,
+            whose workflow state belongs to that server. Events on your own MISP are rejected through their workflow
+            state instead. The data-collection page hides tagged events while "Ignore dismissed events" is on.
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-box-open me-2"></i>Product source markers</div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            These local tags are applied to scraper events when they are used as a source for a CTI product.
+            They are read-only and not configurable.
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Used for Daily Briefing</label>
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control form-control-sm font-monospace" value='zsazsa:product="daily-briefing"' readonly>
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:zsazsa:product=%22daily-briefing%22" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Used for Flash Intel Alert</label>
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control form-control-sm font-monospace" value='zsazsa:product="flash-intel"' readonly>
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:zsazsa:product=%22flash-intel%22" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Used for Vulnerability advisory</label>
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control form-control-sm font-monospace" value='zsazsa:product="vea"' readonly>
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:zsazsa:product=%22vea%22" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small mb-1">Queued for Threat Landscape Report</label>
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control form-control-sm font-monospace" value='zsazsa:product="threat-landscape-report"' readonly>
+                {% if misp_browse_base %}<a href="{{ misp_browse_base }}/events/index/searchtag:zsazsa:product=%22threat-landscape-report%22" target="_blank" rel="noopener" class="btn btn-outline-secondary" title="Browse MISP events"><i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-list-check me-2"></i>Recommended actions</div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Predefined actions shown as checkboxes in the flash intel and VEA wizards. One action per line.
+            Users can still add free-text actions on top of these.
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Immediate actions (0–24h) / VEA immediate</label>
+              <textarea name="RECOMMENDED_ACTIONS_IMMEDIATE" class="form-control font-monospace" rows="8"
+                        placeholder="One action per line">{{ cfg.RECOMMENDED_ACTIONS_IMMEDIATE | join('\n') }}</textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Near-term actions (1–7d)</label>
+              <textarea name="RECOMMENDED_ACTIONS_NEAR_TERM" class="form-control font-monospace" rows="8"
+                        placeholder="One action per line">{{ cfg.RECOMMENDED_ACTIONS_NEAR_TERM | join('\n') }}</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-circle-nodes me-2"></i>Data collection: tag strip prefixes</div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">
+            When a tag starts with one of these prefixes, the prefix is stripped and only the value is shown as a badge.
+            Tags starting with <code>misp-galaxy:</code> also receive a
+            <i class="fas fa-circle-nodes fa-xs"></i> galaxy icon.
+            One prefix per line. Include the trailing <code>=</code> where applicable.
+          </p>
+          <textarea name="COLLECTION_TAG_STRIP_PREFIXES" class="form-control font-monospace" rows="{{ [cfg.COLLECTION_TAG_STRIP_PREFIXES | length + 2, 6] | max }}"
+                    placeholder="One prefix per line, e.g. misp-galaxy:threat-actor=">{{ cfg.COLLECTION_TAG_STRIP_PREFIXES | join('\n') }}</textarea>
+          <div class="form-text">Example: <code>misp-galaxy:malpedia=</code> turns <em>misp-galaxy:malpedia=Emotet</em> into <em>Emotet</em>.</div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-eye-slash me-2"></i>Data collection: hidden tag prefixes</div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">
+            Tags whose prefix matches one of these entries are hidden completely from the data-collection tag display
+            and from the tag-cloud filter. They may still appear in the scraper metadata tooltip.
+            One prefix per line.
+          </p>
+          <textarea name="COLLECTION_TAG_HIDE_PREFIXES" class="form-control font-monospace" rows="{{ [cfg.COLLECTION_TAG_HIDE_PREFIXES | length + 2, 4] | max }}"
+                    placeholder="One prefix per line, e.g. retention">{{ cfg.COLLECTION_TAG_HIDE_PREFIXES | join('\n') }}</textarea>
+          <div class="form-text">Example: <code>retention</code> hides <em>retention:99d</em> from the event tag display.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Notifications tab ──────────────────────────────────────────────── -->
+    <div class="tab-pane fade {{ 'show active' if active_tab == 'tab-notifications' else '' }}" id="tab-notifications" role="tabpanel">
+
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <p class="text-muted small mb-0">
+          Configure notification channels for product publishing and requirement updates. Each channel can be enabled or disabled independently and assigned to specific stakeholders.
+        </p>
+        <button type="submit" class="btn btn-primary ms-3 flex-shrink-0">
+          <i class="fas fa-floppy-disk me-1"></i> Save configuration
+        </button>
+      </div>
+
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="fas fa-comment-dots" style="color:#1c58d9;"></i>
+        <span class="fw-semibold">Mattermost</span>
+      </div>
+
+      <!-- Channel list -->
+      {% set mm_channels = cfg.NOTIFICATION_CHANNELS | rejectattr('type', 'equalto', 'email') | list %}
+      <div id="notification-channel-list">
+        {% for ch in mm_channels %}
+        <div class="notification-channel-row card content-card mb-3" data-original-id="{{ ch.id }}">
+          <div class="card-header d-flex align-items-center gap-2 px-3 py-2">
+            <i class="fas fa-comment-dots" style="color:#1c58d9;"></i>
+            <span class="fw-semibold channel-display-name">{{ ch.name }}</span>
+            <span class="badge {{ 'bg-success' if ch.enabled else 'bg-secondary' }} ms-1 channel-display-enabled">
+              {{ 'Enabled' if ch.enabled else 'Disabled' }}
+            </span>
+            <div class="ms-auto d-flex gap-2 align-items-center">
+              <button type="button" class="btn btn-sm btn-outline-secondary toggle-channel-form">Edit</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary ping-channel-btn" title="Send a test message to this channel">
+                <i class="fas fa-bell"></i>
+              </button>
+              <span class="ping-channel-result small"></span>
+              <button type="button" class="btn btn-sm btn-outline-danger delete-channel-btn">Delete</button>
+            </div>
+          </div>
+          <div class="card-body channel-form" style="display:none;">
+            <div class="row g-3">
+              <div class="col-sm-5">
+                <label class="form-label">Name</label>
+                <input type="text" class="form-control ch-name" value="{{ ch.name }}" placeholder="e.g. SOC Mattermost">
+              </div>
+              <div class="col-sm-7">
+                <label class="form-label">Webhook URL</label>
+                <div class="input-group">
+                  <input type="password" class="form-control font-monospace api-key-input ch-url" value="{{ ch.url }}"
+                         placeholder="https://mattermost.example.com/hooks/…">
+                  <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="col-sm-5">
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input ch-enabled" type="checkbox" {{ 'checked' if ch.enabled }}>
+                  <label class="form-check-label">Enabled</label>
+                </div>
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input ch-verify-tls" type="checkbox" {{ 'checked' if ch.verify_tls is not defined or ch.verify_tls }}>
+                  <label class="form-check-label">Verify TLS certificate</label>
+                </div>
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+              <button type="button" class="btn btn-sm btn-primary save-channel-btn">Save</button>
+              <span class="save-channel-result small align-self-center"></span>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted small" id="no-channels-msg">No Mattermost channels configured yet.</p>
+        {% endfor %}
+        {% if mm_channels %}<p class="text-muted small d-none" id="no-channels-msg">No Mattermost channels configured yet.</p>{% endif %}
+      </div>
+
+      <!-- Add new channel -->
+      <div class="card content-card mb-4 border-dashed">
+        <div class="card-header"><i class="fas fa-plus me-2"></i>Add Mattermost channel</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-sm-5">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-control" id="new-ch-name" placeholder="e.g. SOC Mattermost">
+            </div>
+            <div class="col-sm-7">
+              <label class="form-label">Webhook URL</label>
+              <div class="input-group">
+                <input type="password" class="form-control font-monospace api-key-input" id="new-ch-url"
+                       placeholder="https://mattermost.example.com/hooks/…">
+                <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="col-sm-5">
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="new-ch-enabled" checked>
+                <label class="form-check-label" for="new-ch-enabled">Enabled</label>
+              </div>
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="new-ch-verify-tls" checked>
+                <label class="form-check-label" for="new-ch-verify-tls">Verify TLS certificate</label>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button type="button" class="btn btn-sm btn-primary" id="add-channel-btn">Add channel</button>
+            <span class="small align-self-center" id="add-channel-result"></span>
+          </div>
+          <div class="form-text mt-2"><strong>Triggers:</strong> product published (flash intel, VEA, briefing), PIR/GIR shared, PIR intake status change.</div>
+        </div>
+      </div>
+
+      <hr class="my-4">
+
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <i class="fas fa-envelope" style="color:#0078f1;"></i>
+        <span class="fw-semibold">Email</span>
+      </div>
+
+      <!-- SMTP server settings (shared by all email channels) -->
+      <div class="card content-card mb-3">
+        <div class="card-header"><i class="fas fa-server me-2"></i>SMTP server</div>
+        <div class="card-body">
+          <p class="text-muted small">
+            Shared SMTP settings used to deliver all email channels below.
+          </p>
+          <div class="row g-3">
+            <div class="col-sm-8">
+              <label class="form-label">SMTP host</label>
+              <input type="text" name="SMTP_HOST" class="form-control font-monospace" value="{{ cfg.SMTP_HOST }}" placeholder="smtp.gmail.com">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label">Port</label>
+              <input type="number" name="SMTP_PORT" class="form-control" value="{{ cfg.SMTP_PORT }}" min="1" max="65535">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Username</label>
+              <input type="text" name="SMTP_USERNAME" class="form-control font-monospace" value="{{ cfg.SMTP_USERNAME }}" placeholder="account@gmail.com">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">Password</label>
+              <div class="input-group">
+                <input type="password" name="SMTP_PASSWORD" class="form-control font-monospace api-key-input" value="{{ cfg.SMTP_PASSWORD }}">
+                <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide"><i class="fas fa-eye"></i></button>
+              </div>
+            </div>
+            <div class="col-sm-8">
+              <label class="form-label">From address</label>
+              <input type="text" name="SMTP_FROM" class="form-control font-monospace" value="{{ cfg.SMTP_FROM }}" placeholder="CTI team <account@gmail.com>">
+            </div>
+            <div class="col-sm-4">
+              <div class="form-check form-switch mt-4">
+                <input class="form-check-input" type="checkbox" name="SMTP_USE_TLS" id="smtp_use_tls" value="true" {{ 'checked' if cfg.SMTP_USE_TLS }}>
+                <label class="form-check-label" for="smtp_use_tls">Use STARTTLS</label>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3 align-items-center">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="test-smtp-btn">
+              <i class="fas fa-plug me-1"></i>Test connection
+            </button>
+            <span class="small" id="test-smtp-result"></span>
+          </div>
+          <div class="form-text mt-2">SMTP settings are saved with <strong>Save configuration</strong> at the top of this tab. The test uses the values entered above, even before saving.</div>
+        </div>
+      </div>
+
+      <!-- Email channel list -->
+      <div id="email-channel-list">
+        {% for ch in cfg.NOTIFICATION_CHANNELS if (ch.type or '') == 'email' %}
+        <div class="email-channel-row card content-card mb-3" data-original-id="{{ ch.id }}">
+          <div class="card-header d-flex align-items-center gap-2 px-3 py-2">
+            <i class="fas fa-envelope" style="color:#0078f1;"></i>
+            <span class="fw-semibold ec-display-name">{{ ch.name }}</span>
+            <span class="badge bg-light text-dark ms-1 ec-display-recipient">{{ ch.recipient }}</span>
+            <span class="badge {{ 'bg-success' if ch.enabled else 'bg-secondary' }} ms-1 ec-display-enabled">
+              {{ 'Enabled' if ch.enabled else 'Disabled' }}
+            </span>
+            <div class="ms-auto d-flex gap-2 align-items-center">
+              <button type="button" class="btn btn-sm btn-outline-secondary toggle-ec-form">Edit</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary ping-ec-btn" title="Send a test email to this recipient">
+                <i class="fas fa-paper-plane"></i>
+              </button>
+              <span class="ping-ec-result small"></span>
+              <button type="button" class="btn btn-sm btn-outline-danger delete-ec-btn">Delete</button>
+            </div>
+          </div>
+          <div class="card-body ec-form" style="display:none;">
+            <div class="row g-3">
+              <div class="col-sm-5">
+                <label class="form-label">Name</label>
+                <input type="text" class="form-control ec-name" value="{{ ch.name }}" placeholder="e.g. SOC mailbox">
+              </div>
+              <div class="col-sm-7">
+                <label class="form-label">Recipient email address</label>
+                <input type="email" class="form-control font-monospace ec-recipient" value="{{ ch.recipient }}" placeholder="soc@example.com">
+              </div>
+              <div class="col-sm-5">
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input ec-enabled" type="checkbox" {{ 'checked' if ch.enabled }}>
+                  <label class="form-check-label">Enabled</label>
+                </div>
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+              <button type="button" class="btn btn-sm btn-primary save-ec-btn">Save</button>
+              <span class="save-ec-result small align-self-center"></span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Add new email channel -->
+      <div class="card content-card mb-4 border-dashed">
+        <div class="card-header"><i class="fas fa-plus me-2"></i>Add email channel</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-sm-5">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-control" id="new-ec-name" placeholder="e.g. SOC mailbox">
+            </div>
+            <div class="col-sm-7">
+              <label class="form-label">Recipient email address</label>
+              <input type="email" class="form-control font-monospace" id="new-ec-recipient" placeholder="soc@example.com">
+            </div>
+            <div class="col-sm-5">
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="new-ec-enabled" checked>
+                <label class="form-check-label" for="new-ec-enabled">Enabled</label>
+              </div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button type="button" class="btn btn-sm btn-primary" id="add-ec-btn">Add email channel</button>
+            <span class="small align-self-center" id="add-ec-result"></span>
+          </div>
+          <div class="form-text mt-2">Stakeholders subscribed to this channel receive products by email. Requires the SMTP server above to be configured.</div>
+          <div class="form-text"><i class="fas fa-user-shield me-1"></i>When the same product goes to several recipients, their addresses are hidden from one another.</div>
+        </div>
+      </div>
+
+      <hr class="my-4">
+
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <img src="{{ url_for('static', filename='flowintel-icon.png') }}" alt="Flowintel" style="height:18px;width:auto;">
+        <span class="fw-semibold">Flowintel</span>
+      </div>
+
+      <!-- Flowintel instance list -->
+      <div id="flowintel-instance-list">
+        {% for fi in cfg.FLOWINTEL_INSTANCES %}
+        <div class="flowintel-instance-row card content-card mb-3" data-original-id="{{ fi.id }}">
+          <div class="card-header d-flex align-items-center gap-2 px-3 py-2">
+            <img src="{{ url_for('static', filename='flowintel-icon.png') }}" alt="Flowintel" style="height:16px;width:auto;">
+            <span class="fw-semibold fi-display-name">{{ fi.name }}</span>
+            <span class="badge {{ 'bg-success' if fi.enabled else 'bg-secondary' }} ms-1 fi-display-enabled">
+              {{ 'Enabled' if fi.enabled else 'Disabled' }}
+            </span>
+            <div class="ms-auto d-flex gap-2 align-items-center">
+              <button type="button" class="btn btn-sm btn-outline-secondary toggle-fi-form">Edit</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary test-fi-connection-btn" title="Check connectivity to this Flowintel instance">
+                <i class="fas fa-plug"></i>
+              </button>
+              <span class="test-fi-connection-result small"></span>
+              <button type="button" class="btn btn-sm btn-outline-danger delete-fi-btn">Delete</button>
+            </div>
+          </div>
+          <div class="card-body fi-form" style="display:none;">
+            <div class="row g-3">
+              <div class="col-sm-5">
+                <label class="form-label">Name</label>
+                <input type="text" class="form-control fi-name" value="{{ fi.name }}" placeholder="e.g. Flowintel">
+              </div>
+              <div class="col-sm-7">
+                <label class="form-label">URL</label>
+                <input type="text" class="form-control fi-url" value="{{ fi.url }}" placeholder="https://flowintel.example.com">
+              </div>
+              <div class="col-sm-7">
+                <label class="form-label">API key</label>
+                <div class="input-group">
+                  <input type="password" class="form-control font-monospace api-key-input fi-api-key" value="{{ fi.api_key }}">
+                  <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="col-sm-5">
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input fi-enabled" type="checkbox" {{ 'checked' if fi.enabled }}>
+                  <label class="form-check-label">Enabled</label>
+                </div>
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input fi-verify-tls" type="checkbox" {{ 'checked' if fi.verify_tls is not defined or fi.verify_tls }}>
+                  <label class="form-check-label">Verify TLS certificate</label>
+                </div>
+              </div>
+            </div>
+            <div class="mt-3">
+              <label class="form-label d-block mb-1">Case templates for CTI products</label>
+              <table class="table table-sm align-middle mb-1 fi-case-template-table">
+                <thead>
+                  <tr><th style="width:90px;">Status</th><th>CTI product</th><th>Case template</th><th>Initial task</th></tr>
+                </thead>
+                <tbody>
+                  {% for p in cfg.FLOWINTEL_CASE_TEMPLATE_PRODUCTS %}
+                  {% set ct = (fi.case_templates or {}).get(p.key, {}) %}
+                  <tr data-product="{{ p.key }}" data-template-id="{{ ct.get('template_id', '') }}"
+                      data-initial-task-set="{{ 'true' if 'initial_task' in ct else 'false' }}"
+                      data-initial-task="{{ ct.get('initial_task', '') }}">
+                    <td>
+                      <div class="form-check form-switch mb-0">
+                        <input class="form-check-input fi-ct-enabled" type="checkbox" {{ 'checked' if ct.get('enabled') }}>
+                      </div>
+                    </td>
+                    <td>{{ p.label }}</td>
+                    <td><select class="form-select form-select-sm fi-ct-template"><option value="">Loading templates...</option></select></td>
+                    <td><select class="form-select form-select-sm fi-ct-initial-task"><option value="">Loading tasks...</option></select></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              <div class="form-text">Enable to create a Flowintel case from the selected template when this product is published.</div>
+            </div>
+            <div class="d-flex gap-2 mt-3">
+              <button type="button" class="btn btn-sm btn-primary save-fi-btn">Save</button>
+              <span class="save-fi-result small align-self-center"></span>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted small" id="no-flowintel-msg">No Flowintel instances configured yet.</p>
+        {% endfor %}
+        {% if cfg.FLOWINTEL_INSTANCES %}<p class="text-muted small d-none" id="no-flowintel-msg">No Flowintel instances configured yet.</p>{% endif %}
+      </div>
+
+      <!-- Add new Flowintel instance -->
+      <div class="card content-card mb-4 border-dashed">
+        <div class="card-header"><i class="fas fa-plus me-2"></i>Add Flowintel case management instance</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-sm-5">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-control" id="new-fi-name" placeholder="e.g. Flowintel">
+            </div>
+            <div class="col-sm-7">
+              <label class="form-label">URL</label>
+              <input type="text" class="form-control" id="new-fi-url" placeholder="https://flowintel.example.com">
+            </div>
+            <div class="col-sm-7">
+              <label class="form-label">API key</label>
+              <div class="input-group">
+                <input type="password" class="form-control font-monospace api-key-input" id="new-fi-api-key">
+                <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="col-sm-5">
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="new-fi-enabled" checked>
+                <label class="form-check-label" for="new-fi-enabled">Enabled</label>
+              </div>
+              <div class="form-check form-switch mt-2">
+                <input class="form-check-input" type="checkbox" id="new-fi-verify-tls" checked>
+                <label class="form-check-label" for="new-fi-verify-tls">Verify TLS certificate</label>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label d-block mb-1">Case templates for CTI products</label>
+            <table class="table table-sm align-middle mb-1 fi-case-template-table" id="new-fi-case-template-table">
+              <thead>
+                <tr><th style="width:90px;">Status</th><th>CTI product</th><th>Case template</th><th>Initial task</th></tr>
+              </thead>
+              <tbody>
+                {% for p in cfg.FLOWINTEL_CASE_TEMPLATE_PRODUCTS %}
+                <tr data-product="{{ p.key }}" data-template-id="" data-initial-task-set="false" data-initial-task="">
+                  <td>
+                    <div class="form-check form-switch mb-0">
+                      <input class="form-check-input fi-ct-enabled" type="checkbox">
+                    </div>
+                  </td>
+                  <td>{{ p.label }}</td>
+                  <td><select class="form-select form-select-sm fi-ct-template"><option value="">Test connection to load templates</option></select></td>
+                  <td><select class="form-select form-select-sm fi-ct-initial-task"><option value="">Test connection to load templates</option></select></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <div class="form-text">Enable to create a Flowintel case from the selected template when this product is published.</div>
+          </div>
+          <div class="d-flex gap-2 mt-3 align-items-center">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="test-new-fi-btn">
+              <i class="fas fa-plug me-1"></i>Test connection
+            </button>
+            <span class="small" id="test-new-fi-result"></span>
+            <button type="button" class="btn btn-sm btn-primary" id="add-fi-btn">Add instance</button>
+            <span class="small" id="add-fi-result"></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Styling tab ────────────────────────────────────────────────────── -->
+    <div class="tab-pane fade {{ 'show active' if active_tab == 'tab-styling' else '' }}" id="tab-styling" role="tabpanel">
+
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <p class="text-muted small mb-0">
+          Branding applied to PDF outputs and channel notifications.
+        </p>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-floppy-disk me-1"></i> Save styling
+        </button>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-swatchbook me-2"></i>Theme</div>
+        <div class="card-body">
+          <label class="form-label">UI theme</label>
+          <select name="THEME" class="form-select" style="max-width:320px;">
+            <option value="overmind" {{ 'selected' if cfg.THEME == 'overmind' }}>Overmind (MISP teal, default)</option>
+            <option value="uibeta" {{ 'selected' if cfg.THEME == 'uibeta' }}>UiBeta (MISP-style light)</option>
+            <option value="default" {{ 'selected' if cfg.THEME == 'default' }}>Zsazsa legacy (navy)</option>
+          </select>
+          <div class="form-text">
+            Re-colours the entire interface. "UiBeta" mirrors MISP's UiBeta theme and
+            "Overmind" mirrors MISP's Overmind theme (teal primary, lime/coral accents):
+            both use a top navigation bar instead of the side menu. Takes effect on the
+            next page load.
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-building me-2"></i>Organisation</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Company name</label>
+              <input type="text" name="BRAND_COMPANY" class="form-control" value="{{ cfg.BRAND_COMPANY }}"
+                     placeholder="e.g. Acme Corp">
+              <div class="form-text">Used to brand PDF reports and notifications.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Department</label>
+              <input type="text" name="BRAND_DEPARTMENT" class="form-control" value="{{ cfg.BRAND_DEPARTMENT }}"
+                     placeholder="e.g. Cyber Threat Intelligence">
+              <div class="form-text">Shown below the company name on reports.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-image me-2"></i>Logo</div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">PNG or JPG, maximum 2 MB. The logo is placed in the PDF header.</p>
+          {% if cfg.BRAND_LOGO %}
+          <div class="mb-3">
+            <img src="{{ url_for('config_page.serve_logo') }}" alt="Current logo"
+                 style="max-height:60px;max-width:240px;object-fit:contain;border:1px solid var(--border-light);border-radius:4px;padding:6px;">
+            <div class="form-text mt-1">Current: {{ cfg.BRAND_LOGO }}</div>
+          </div>
+          {% endif %}
+          <div class="d-flex gap-2 align-items-center">
+            <input type="file" id="logo-file-input" accept=".png,.jpg,.jpeg" class="form-control" style="max-width:320px;">
+            <button type="button" class="btn btn-outline-secondary" id="logo-upload-btn">
+              <i class="fas fa-upload me-1"></i>Upload
+            </button>
+            <span id="logo-upload-result" class="small"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-palette me-2"></i>Brand colours</div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            These three colours form the palette used in PDF outputs. Colour 1 is the primary (header, headings),
+            colour 2 is the accent (rules, highlights), colour 3 is secondary (labels, footer text).
+          </p>
+          <div class="row g-3">
+            <div class="col-sm-4">
+              <label class="form-label">Colour 1 (primary)</label>
+              <div class="d-flex gap-2 align-items-center">
+                <input type="color" name="BRAND_COLOR_1" class="form-control form-control-color"
+                       value="{{ cfg.BRAND_COLOR_1 }}" title="Primary colour">
+                <input type="text" class="form-control form-control-sm font-monospace color-hex-input"
+                       value="{{ cfg.BRAND_COLOR_1 }}" data-target="BRAND_COLOR_1" maxlength="7">
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label">Colour 2 (accent)</label>
+              <div class="d-flex gap-2 align-items-center">
+                <input type="color" name="BRAND_COLOR_2" class="form-control form-control-color"
+                       value="{{ cfg.BRAND_COLOR_2 }}" title="Accent colour">
+                <input type="text" class="form-control form-control-sm font-monospace color-hex-input"
+                       value="{{ cfg.BRAND_COLOR_2 }}" data-target="BRAND_COLOR_2" maxlength="7">
+              </div>
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label">Colour 3 (secondary)</label>
+              <div class="d-flex gap-2 align-items-center">
+                <input type="color" name="BRAND_COLOR_3" class="form-control form-control-color"
+                       value="{{ cfg.BRAND_COLOR_3 }}" title="Secondary colour">
+                <input type="text" class="form-control form-control-sm font-monospace color-hex-input"
+                       value="{{ cfg.BRAND_COLOR_3 }}" data-target="BRAND_COLOR_3" maxlength="7">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</form>
+
+<script>
+(function() {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // Keep tab state across save reloads (server renders the active tab from ?tab=...)
+  const activeTabInput = document.getElementById('cfg-active-tab-input');
+  document.querySelectorAll('#cfg-tabs button').forEach(btn => {
+    btn.addEventListener('shown.bs.tab', e => {
+      activeTabInput.value = e.target.dataset.bsTarget.replace('#', '');
+    });
+  });
+
+  // API key toggles for non-server fields (scraper, webapp, openai, mattermost)
+  document.querySelectorAll('.api-key-toggle').forEach((btn) => {
+    if (btn.closest('.misp-server-row')) return; // handled per-row above
+    if (btn.closest('.flowintel-instance-row')) return; // handled per-row above
+    btn.addEventListener('click', () => {
+      const input = btn.closest('.input-group').querySelector('.api-key-input');
+      const icon = btn.querySelector('i');
+      if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('fa-eye', 'fa-eye-slash');
+      } else {
+        input.type = 'password';
+        icon.classList.replace('fa-eye-slash', 'fa-eye');
+      }
+    });
+  });
+
+  // ── Prompts tab save / add ────────────────────────────────────────────
+  const savePromptsBtn = document.getElementById('save-prompts-btn');
+  const promptAlert = document.getElementById('prompt-save-alert');
+
+  function showPromptAlert(msg, type) {
+    if (!promptAlert) return;
+    promptAlert.textContent = msg;
+    promptAlert.className = 'alert alert-' + type + ' mb-3';
+    promptAlert.classList.remove('d-none');
+    setTimeout(() => { promptAlert.classList.add('d-none'); }, 4000);
+  }
+
+  if (savePromptsBtn) {
+    savePromptsBtn.addEventListener('click', () => {
+      const prompts = [];
+      document.querySelectorAll('.prompt-textarea').forEach((ta) => {
+        prompts.push({filename: ta.dataset.filename, content: ta.value});
+      });
+      savePromptsBtn.disabled = true;
+      fetch(SCRIPT_ROOT + '/config/prompts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({prompts: prompts}),
+      })
+      .then(r => r.json())
+      .then(data => {
+        savePromptsBtn.disabled = false;
+        if (data.ok) {
+          showPromptAlert('Prompts saved.', 'success');
+          window.cfgDirty?.clean('prompts');
+        } else {
+          showPromptAlert('Error: ' + (data.error || 'unknown'), 'warning');
+        }
+      })
+      .catch(() => {
+        savePromptsBtn.disabled = false;
+        showPromptAlert('Request failed.', 'danger');
+      });
+    });
+  }
+
+  // ── AI tab save ──────────────────────────────────────────────────────
+  const saveAiBtn = document.getElementById('save-ai-btn');
+  const aiAlert = document.getElementById('ai-save-alert');
+
+  function showAiAlert(msg, type) {
+    if (!aiAlert) return;
+    aiAlert.textContent = msg;
+    aiAlert.className = 'alert alert-' + type + ' mb-3';
+    aiAlert.classList.remove('d-none');
+    setTimeout(() => { aiAlert.classList.add('d-none'); }, 4000);
+  }
+
+  // ── LLM providers ────────────────────────────────────────────────────
+  // The fields of each provider card, plus the label used in messages. A
+  // provider can only be picked for a feature while it is enabled, and it
+  // cannot be switched off while features still point at it.
+  const providers = {
+    openai: {
+      label: 'OpenAI',
+      enabled: document.getElementById('llm-openai-enabled'),
+      apiKey: document.getElementById('llm-openai-key'),
+      model: document.getElementById('ai-default-model'),
+    },
+    local: {
+      label: 'Local LLM',
+      enabled: document.getElementById('llm-local-enabled'),
+      apiKey: document.getElementById('llm-local-key'),
+      url: document.getElementById('llm-local-url'),
+      model: document.getElementById('llm-local-model'),
+    },
+  };
+  const defaultProviderInput = document.getElementById('llm-default-provider');
+  const defaultProviderBtns = document.querySelectorAll('.llm-default-btn');
+  const featureProviders = document.querySelectorAll('.ai-provider-select');
+
+  function paintDefaultProvider() {
+    defaultProviderBtns.forEach((btn) => {
+      const isDefault = btn.dataset.provider === defaultProviderInput.value;
+      btn.classList.toggle('btn-primary', isDefault);
+      btn.classList.toggle('btn-outline-secondary', !isDefault);
+    });
+  }
+
+  // Per feature: hide providers that are switched off unless this feature still
+  // uses one, and show the chosen provider's default model as the model hint.
+  function paintFeatureRows() {
+    featureProviders.forEach((sel) => {
+      Array.from(sel.options).forEach((opt) => {
+        const available = providers[opt.value].enabled.checked || sel.value === opt.value;
+        opt.hidden = !available;
+        opt.disabled = !available;
+      });
+      const input = sel.closest('tr').querySelector('.ai-model-input');
+      input.placeholder = providers[sel.value].model.value.trim() || 'no default model set';
+    });
+  }
+
+  function featuresUsing(provider) {
+    return Array.from(featureProviders).filter((sel) => sel.value === provider).length;
+  }
+
+  paintDefaultProvider();
+  paintFeatureRows();
+
+  defaultProviderBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      defaultProviderInput.value = btn.dataset.provider;
+      paintDefaultProvider();
+      window.cfgDirty?.dirty('ai');
+    });
+  });
+
+  Object.entries(providers).forEach(([name, provider]) => {
+    provider.enabled.addEventListener('change', () => {
+      const inUse = provider.enabled.checked ? 0 : featuresUsing(name);
+      if (inUse) {
+        provider.enabled.checked = true;
+        showAiAlert(provider.label + ' is in use by ' + inUse + ' feature' + (inUse === 1 ? '' : 's')
+                    + '. Point those features to another provider before disabling it.', 'warning');
+        return;
+      }
+      // A disabled provider cannot stay the default, or features that do not
+      // choose one themselves would have nowhere to go.
+      if (!provider.enabled.checked && defaultProviderInput.value === name) {
+        const fallback = Object.keys(providers).find((other) => providers[other].enabled.checked);
+        if (fallback) {
+          defaultProviderInput.value = fallback;
+          paintDefaultProvider();
+          showAiAlert(providers[fallback].label + ' is now the default provider.', 'info');
+        }
+      }
+      paintFeatureRows();
+    });
+    provider.model.addEventListener('input', paintFeatureRows);
+  });
+
+  featureProviders.forEach((sel) => sel.addEventListener('change', paintFeatureRows));
+
+  if (saveAiBtn) {
+    saveAiBtn.addEventListener('click', () => {
+      const providerSettings = {
+        default: defaultProviderInput.value,
+        openai: {
+          enabled: providers.openai.enabled.checked,
+          api_key: providers.openai.apiKey.value,
+        },
+        local: {
+          enabled: providers.local.enabled.checked,
+          url: providers.local.url.value,
+          api_key: providers.local.apiKey.value,
+          model: providers.local.model.value,
+        },
+      };
+      const features = {};
+      document.querySelectorAll('#ai-features-table tbody tr[data-feature-id]').forEach(row => {
+        const fid = row.dataset.featureId;
+        features[fid] = {
+          provider: row.querySelector('.ai-provider-select').value,
+          model: (row.querySelector('.ai-model-input')?.value || '').trim(),
+          temperature: (row.querySelector('.ai-temperature-input')?.value || '').trim(),
+          prompt: row.querySelector('.ai-prompt-select')?.value || '',
+        };
+      });
+      saveAiBtn.disabled = true;
+      fetch(SCRIPT_ROOT + '/config/save-ai-features', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({
+          default_model: providers.openai.model.value.trim(),
+          providers: providerSettings,
+          features,
+        }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        saveAiBtn.disabled = false;
+        if (data.ok) {
+          showAiAlert('Configuration saved.', 'success');
+          window.cfgDirty?.clean('ai');
+        } else {
+          showAiAlert('Error: ' + (data.error || 'unknown'), 'warning');
+        }
+      })
+      .catch(() => {
+        saveAiBtn.disabled = false;
+        showAiAlert('Request failed.', 'danger');
+      });
+    });
+  }
+
+  const addPromptBtn = document.getElementById('add-prompt-btn');
+  if (addPromptBtn) {
+    addPromptBtn.addEventListener('click', () => {
+      const nameInput = document.getElementById('new-prompt-name');
+      const contentInput = document.getElementById('new-prompt-content');
+      const name = (nameInput.value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+      const content = contentInput.value || '';
+      if (!name) { showPromptAlert('Enter a filename.', 'warning'); return; }
+      addPromptBtn.disabled = true;
+      fetch(SCRIPT_ROOT + '/config/prompts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({prompts: [{filename: name + '.md', content: content}]}),
+      })
+      .then(r => r.json())
+      .then(data => {
+        addPromptBtn.disabled = false;
+        if (data.ok) {
+          showPromptAlert('Prompt file created. Reload to see it.', 'success');
+          nameInput.value = '';
+          contentInput.value = '';
+        } else {
+          showPromptAlert('Error: ' + (data.error || 'unknown'), 'warning');
+        }
+      })
+      .catch(() => {
+        addPromptBtn.disabled = false;
+        showPromptAlert('Request failed.', 'danger');
+      });
+    });
+  }
+})();
+
+// ── Notification channels ──────────────────────────────────────────────────
+(function () {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const list = document.getElementById('notification-channel-list');
+  if (!list) return;
+
+  function bindRow(row) {
+    const toggleBtn = row.querySelector('.toggle-channel-form');
+    const form = row.querySelector('.channel-form');
+    const deleteBtn = row.querySelector('.delete-channel-btn');
+    const pingBtn = row.querySelector('.ping-channel-btn');
+    const pingResult = row.querySelector('.ping-channel-result');
+    const saveBtn = row.querySelector('.save-channel-btn');
+    const saveResult = row.querySelector('.save-channel-result');
+
+    if (toggleBtn && form) {
+      toggleBtn.addEventListener('click', () => {
+        const open = form.style.display !== 'none';
+        form.style.display = open ? 'none' : '';
+        toggleBtn.textContent = open ? 'Edit' : 'Close';
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        const originalId = row.dataset.originalId;
+        if (!confirm('Delete this notification channel?')) return;
+        const resp = await fetch(SCRIPT_ROOT + '/config/delete-notification-channel', {
+          method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({channel_id: originalId}),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          row.remove();
+          const noMsg = document.getElementById('no-channels-msg');
+          if (noMsg && !list.querySelector('.notification-channel-row')) noMsg.classList.remove('d-none');
+        } else {
+          alert('Delete failed: ' + (data.error || 'unknown'));
+        }
+      });
+    }
+
+    if (pingBtn && pingResult) {
+      pingBtn.addEventListener('click', async () => {
+        const channelId = row.dataset.originalId;
+        pingBtn.disabled = true;
+        pingResult.textContent = 'Sending…';
+        pingResult.className = 'ping-channel-result small text-muted';
+        const resp = await fetch(SCRIPT_ROOT + '/config/ping-notification-channel', {
+          method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({channel_id: channelId}),
+        });
+        const data = await resp.json();
+        pingBtn.disabled = false;
+        if (data.ok) {
+          pingResult.textContent = 'Sent';
+          pingResult.className = 'ping-channel-result small text-success';
+        } else {
+          pingResult.textContent = data.error || 'Failed';
+          pingResult.className = 'ping-channel-result small text-danger';
+        }
+        setTimeout(() => { pingResult.textContent = ''; }, 4000);
+      });
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        const originalId = row.dataset.originalId;
+        const name = row.querySelector('.ch-name').value.trim();
+        const url = row.querySelector('.ch-url').value.trim();
+        const enabled = row.querySelector('.ch-enabled').checked;
+        const verifyTls = row.querySelector('.ch-verify-tls').checked;
+        if (!name) { saveResult.textContent = 'Name required'; saveResult.className = 'save-channel-result small text-danger'; return; }
+        const resp = await fetch(SCRIPT_ROOT + '/config/save-notification-channel', {
+          method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({original_id: originalId, name, url, enabled, verify_tls: verifyTls, type: 'mattermost'}),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          row.dataset.originalId = data.new_id;
+          row.querySelector('.channel-display-name').textContent = name;
+          const badge = row.querySelector('.channel-display-enabled');
+          badge.textContent = enabled ? 'Enabled' : 'Disabled';
+          badge.className = 'badge ms-1 channel-display-enabled ' + (enabled ? 'bg-success' : 'bg-secondary');
+          saveResult.textContent = 'Saved';
+          saveResult.className = 'save-channel-result small text-success';
+          setTimeout(() => { saveResult.textContent = ''; }, 3000);
+        } else {
+          saveResult.textContent = data.error || 'Save failed';
+          saveResult.className = 'save-channel-result small text-danger';
+        }
+      });
+    }
+  }
+
+  list.querySelectorAll('.notification-channel-row').forEach(bindRow);
+
+  const addBtn = document.getElementById('add-channel-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const nameEl = document.getElementById('new-ch-name');
+      const urlEl = document.getElementById('new-ch-url');
+      const enabledEl = document.getElementById('new-ch-enabled');
+      const resultEl = document.getElementById('add-channel-result');
+      const name = nameEl.value.trim();
+      const url = urlEl.value.trim();
+      const enabled = enabledEl.checked;
+      const verifyTlsEl = document.getElementById('new-ch-verify-tls');
+      const verifyTls = verifyTlsEl ? verifyTlsEl.checked : true;
+      if (!name) { resultEl.textContent = 'Name required'; resultEl.className = 'small text-danger'; return; }
+      const resp = await fetch(SCRIPT_ROOT + '/config/save-notification-channel', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({name, url, enabled, verify_tls: verifyTls, type: 'mattermost'}),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        const noMsg = document.getElementById('no-channels-msg');
+        if (noMsg) noMsg.classList.add('d-none');
+        const tpl = document.createElement('div');
+        tpl.className = 'notification-channel-row card content-card mb-3';
+        tpl.dataset.originalId = data.new_id;
+        tpl.innerHTML = `
+          <div class="card-header d-flex align-items-center gap-2 px-3 py-2">
+            <i class="fas fa-comment-dots" style="color:#1c58d9;"></i>
+            <span class="fw-semibold channel-display-name">${name}</span>
+            <span class="badge ${enabled ? 'bg-success' : 'bg-secondary'} ms-1 channel-display-enabled">${enabled ? 'Enabled' : 'Disabled'}</span>
+            <div class="ms-auto d-flex gap-2 align-items-center">
+              <button type="button" class="btn btn-sm btn-outline-secondary toggle-channel-form">Edit</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary ping-channel-btn" title="Send a test message to this channel"><i class="fas fa-bell"></i></button>
+              <span class="ping-channel-result small"></span>
+              <button type="button" class="btn btn-sm btn-outline-danger delete-channel-btn">Delete</button>
+            </div>
+          </div>
+          <div class="card-body channel-form" style="display:none;">
+            <div class="row g-3">
+              <div class="col-sm-5"><label class="form-label">Name</label><input type="text" class="form-control ch-name" value="${name}"></div>
+              <div class="col-sm-7"><label class="form-label">Webhook URL</label>
+                <div class="input-group"><input type="password" class="form-control font-monospace api-key-input ch-url" value="${url}">
+                <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide"><i class="fas fa-eye"></i></button></div>
+              </div>
+              <div class="col-sm-5"><div class="form-check form-switch mt-2"><input class="form-check-input ch-enabled" type="checkbox" ${enabled ? 'checked' : ''}><label class="form-check-label">Enabled</label></div></div>
+              <div class="col-sm-5"><div class="form-check form-switch mt-2"><input class="form-check-input ch-verify-tls" type="checkbox" ${verifyTls ? 'checked' : ''}><label class="form-check-label">Verify TLS certificate</label></div></div>
+            </div>
+            <div class="d-flex gap-2 mt-3"><button type="button" class="btn btn-sm btn-primary save-channel-btn">Save</button><span class="save-channel-result small align-self-center"></span></div>
+          </div>`;
+        list.insertBefore(tpl, list.firstChild);
+        bindRow(tpl);
+        nameEl.value = ''; urlEl.value = ''; enabledEl.checked = true;
+        if (verifyTlsEl) verifyTlsEl.checked = true;
+        resultEl.textContent = 'Channel added';
+        resultEl.className = 'small text-success';
+        setTimeout(() => { resultEl.textContent = ''; }, 3000);
+      } else {
+        resultEl.textContent = data.error || 'Failed';
+        resultEl.className = 'small text-danger';
+      }
+    });
+  }
+})();
+
+// ── SMTP test connection ──────────────────────────────────────────────────────
+(function () {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const btn = document.getElementById('test-smtp-btn');
+  const resultEl = document.getElementById('test-smtp-result');
+  if (!btn || !resultEl) return;
+
+  btn.addEventListener('click', async () => {
+    const field = (name) => document.querySelector(`[name="${name}"]`);
+    btn.disabled = true;
+    resultEl.textContent = 'Testing…';
+    resultEl.className = 'small text-muted';
+    let data;
+    try {
+      const resp = await fetch(SCRIPT_ROOT + '/config/test-smtp-connection', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({
+          host: field('SMTP_HOST').value.trim(),
+          port: field('SMTP_PORT').value.trim(),
+          use_tls: document.getElementById('smtp_use_tls').checked,
+          username: field('SMTP_USERNAME').value.trim(),
+          password: field('SMTP_PASSWORD').value,
+        }),
+      });
+      data = await resp.json();
+    } catch (e) {
+      data = {ok: false, error: 'Request failed'};
+    }
+    btn.disabled = false;
+    if (data.ok) {
+      resultEl.textContent = 'Connection OK';
+      resultEl.className = 'small text-success';
+    } else {
+      resultEl.textContent = data.error || 'Failed';
+      resultEl.className = 'small text-danger';
+    }
+  });
+})();
+
+// ── Email channels ────────────────────────────────────────────────────────────
+(function () {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const list = document.getElementById('email-channel-list');
+  if (!list) return;
+
+  function bindRow(row) {
+    const toggleBtn = row.querySelector('.toggle-ec-form');
+    const form = row.querySelector('.ec-form');
+    const deleteBtn = row.querySelector('.delete-ec-btn');
+    const pingBtn = row.querySelector('.ping-ec-btn');
+    const pingResult = row.querySelector('.ping-ec-result');
+    const saveBtn = row.querySelector('.save-ec-btn');
+    const saveResult = row.querySelector('.save-ec-result');
+
+    if (toggleBtn && form) {
+      toggleBtn.addEventListener('click', () => {
+        const open = form.style.display !== 'none';
+        form.style.display = open ? 'none' : '';
+        toggleBtn.textContent = open ? 'Edit' : 'Close';
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm('Delete this email channel?')) return;
+        const resp = await fetch(SCRIPT_ROOT + '/config/delete-notification-channel', {
+          method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({channel_id: row.dataset.originalId}),
+        });
+        const data = await resp.json();
+        if (data.ok) { row.remove(); } else { alert('Delete failed: ' + (data.error || 'unknown')); }
+      });
+    }
+
+    if (pingBtn && pingResult) {
+      pingBtn.addEventListener('click', async () => {
+        pingBtn.disabled = true;
+        pingResult.textContent = 'Sending…';
+        pingResult.className = 'ping-ec-result small text-muted';
+        const resp = await fetch(SCRIPT_ROOT + '/config/ping-notification-channel', {
+          method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({channel_id: row.dataset.originalId}),
+        });
+        const data = await resp.json();
+        pingBtn.disabled = false;
+        if (data.ok) {
+          pingResult.textContent = 'Sent';
+          pingResult.className = 'ping-ec-result small text-success';
+        } else {
+          pingResult.textContent = data.error || 'Failed';
+          pingResult.className = 'ping-ec-result small text-danger';
+        }
+        setTimeout(() => { pingResult.textContent = ''; }, 5000);
+      });
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        const name = row.querySelector('.ec-name').value.trim();
+        const recipient = row.querySelector('.ec-recipient').value.trim();
+        const enabled = row.querySelector('.ec-enabled').checked;
+        if (!name) { saveResult.textContent = 'Name required'; saveResult.className = 'save-ec-result small text-danger'; return; }
+        const resp = await fetch(SCRIPT_ROOT + '/config/save-notification-channel', {
+          method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({original_id: row.dataset.originalId, name, recipient, enabled, type: 'email'}),
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          row.dataset.originalId = data.new_id;
+          row.querySelector('.ec-display-name').textContent = name;
+          row.querySelector('.ec-display-recipient').textContent = recipient;
+          const badge = row.querySelector('.ec-display-enabled');
+          badge.textContent = enabled ? 'Enabled' : 'Disabled';
+          badge.className = 'badge ms-1 ec-display-enabled ' + (enabled ? 'bg-success' : 'bg-secondary');
+          saveResult.textContent = 'Saved';
+          saveResult.className = 'save-ec-result small text-success';
+          setTimeout(() => { saveResult.textContent = ''; }, 3000);
+        } else {
+          saveResult.textContent = data.error || 'Save failed';
+          saveResult.className = 'save-ec-result small text-danger';
+        }
+      });
+    }
+  }
+
+  list.querySelectorAll('.email-channel-row').forEach(bindRow);
+
+  const addBtn = document.getElementById('add-ec-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const nameEl = document.getElementById('new-ec-name');
+      const recipientEl = document.getElementById('new-ec-recipient');
+      const enabledEl = document.getElementById('new-ec-enabled');
+      const resultEl = document.getElementById('add-ec-result');
+      const name = nameEl.value.trim();
+      const recipient = recipientEl.value.trim();
+      const enabled = enabledEl.checked;
+      if (!name) { resultEl.textContent = 'Name required'; resultEl.className = 'small text-danger'; return; }
+      if (!recipient) { resultEl.textContent = 'Recipient required'; resultEl.className = 'small text-danger'; return; }
+      const resp = await fetch(SCRIPT_ROOT + '/config/save-notification-channel', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({name, recipient, enabled, type: 'email'}),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        const tpl = document.createElement('div');
+        tpl.className = 'email-channel-row card content-card mb-3';
+        tpl.dataset.originalId = data.new_id;
+        tpl.innerHTML = `
+          <div class="card-header d-flex align-items-center gap-2 px-3 py-2">
+            <i class="fas fa-envelope" style="color:#0078f1;"></i>
+            <span class="fw-semibold ec-display-name">${name}</span>
+            <span class="badge bg-light text-dark ms-1 ec-display-recipient">${recipient}</span>
+            <span class="badge ${enabled ? 'bg-success' : 'bg-secondary'} ms-1 ec-display-enabled">${enabled ? 'Enabled' : 'Disabled'}</span>
+            <div class="ms-auto d-flex gap-2 align-items-center">
+              <button type="button" class="btn btn-sm btn-outline-secondary toggle-ec-form">Edit</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary ping-ec-btn" title="Send a test email to this recipient"><i class="fas fa-paper-plane"></i></button>
+              <span class="ping-ec-result small"></span>
+              <button type="button" class="btn btn-sm btn-outline-danger delete-ec-btn">Delete</button>
+            </div>
+          </div>
+          <div class="card-body ec-form" style="display:none;">
+            <div class="row g-3">
+              <div class="col-sm-5"><label class="form-label">Name</label><input type="text" class="form-control ec-name" value="${name}"></div>
+              <div class="col-sm-7"><label class="form-label">Recipient email address</label><input type="email" class="form-control font-monospace ec-recipient" value="${recipient}"></div>
+              <div class="col-sm-5"><div class="form-check form-switch mt-2"><input class="form-check-input ec-enabled" type="checkbox" ${enabled ? 'checked' : ''}><label class="form-check-label">Enabled</label></div></div>
+            </div>
+            <div class="d-flex gap-2 mt-3"><button type="button" class="btn btn-sm btn-primary save-ec-btn">Save</button><span class="save-ec-result small align-self-center"></span></div>
+          </div>`;
+        list.appendChild(tpl);
+        bindRow(tpl);
+        nameEl.value = ''; recipientEl.value = ''; enabledEl.checked = true;
+        resultEl.textContent = 'Email channel added';
+        resultEl.className = 'small text-success';
+        setTimeout(() => { resultEl.textContent = ''; }, 3000);
+      } else {
+        resultEl.textContent = data.error || 'Failed';
+        resultEl.className = 'small text-danger';
+      }
+    });
+  }
+})();
+
+// ── Flowintel instances ──────────────────────────────────────────────────────
+(function () {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const list = document.getElementById('flowintel-instance-list');
+  if (!list) return;
+
+  const FI_PRODUCTS = {{ cfg.FLOWINTEL_CASE_TEMPLATE_PRODUCTS | tojson }};
+
+  async function parseJsonResponse(resp) {
+    try {
+      return await resp.json();
+    } catch (_) {
+      return {ok: false, error: 'Unexpected server response (HTTP ' + resp.status + ').'};
+    }
+  }
+
+  function caseTemplateTableRowsHtml(placeholderText) {
+    return FI_PRODUCTS.map((p) => `
+      <tr data-product="${p.key}" data-template-id="" data-initial-task-set="false" data-initial-task="">
+        <td><div class="form-check form-switch mb-0"><input class="form-check-input fi-ct-enabled" type="checkbox"></div></td>
+        <td>${p.label}</td>
+        <td><select class="form-select form-select-sm fi-ct-template"><option value="">${placeholderText}</option></select></td>
+        <td><select class="form-select form-select-sm fi-ct-initial-task"><option value="">${placeholderText}</option></select></td>
+      </tr>`).join('');
+  }
+
+  function caseTemplateOptionsHtml(templates, selectedId) {
+    selectedId = selectedId ? String(selectedId) : '';
+    let html = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Select a template…';
+    if (selectedId === '') placeholder.setAttribute('selected', '');
+    html += placeholder.outerHTML;
+    const ids = [];
+    (templates || []).forEach((t) => {
+      const id = String(t.id);
+      ids.push(id);
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = t.title;
+      if (id === selectedId) opt.setAttribute('selected', '');
+      html += opt.outerHTML;
+    });
+    // Keep the saved template selectable even if the API list is unavailable or
+    // no longer contains it, so the configured value is still shown.
+    if (selectedId && !ids.includes(selectedId)) {
+      const opt = document.createElement('option');
+      opt.value = selectedId;
+      opt.textContent = 'Template ' + selectedId;
+      opt.setAttribute('selected', '');
+      html += opt.outerHTML;
+    }
+    return html;
+  }
+
+  // Defaults to a product-specific preset task if initial_task was never saved before.
+  function initialTaskOptionsHtml(tasks, productKey, savedSet, savedValue) {
+    const titles = (tasks || []).map((t) => t.title);
+    let value = '';
+    if (savedSet) {
+      // A saved choice is authoritative, even an empty one (intentional None)
+      // or one not in the fetched list (API slow/unreachable, or task renamed).
+      value = savedValue;
+    } else if (productKey === 'Vulnerability advisory' && titles.includes('Check CVE and vulnerability intelligence')) {
+      value = 'Check CVE and vulnerability intelligence';
+    } else if (productKey === 'Flash intel alert' && titles.length) {
+      value = titles[0];
+    }
+    // Always include the selected value as an option so it is shown even when it
+    // is not part of the fetched task list.
+    const optionTitles = titles.slice();
+    if (value && !optionTitles.includes(value)) optionTitles.unshift(value);
+    let html = '';
+    const noneOpt = document.createElement('option');
+    noneOpt.value = '';
+    noneOpt.textContent = 'None (skip initial task)';
+    if (value === '') noneOpt.setAttribute('selected', '');
+    html += noneOpt.outerHTML;
+    optionTitles.forEach((title) => {
+      const opt = document.createElement('option');
+      opt.value = title;
+      opt.textContent = title;
+      if (title === value) opt.setAttribute('selected', '');
+      html += opt.outerHTML;
+    });
+    return html;
+  }
+
+  // preferDefault: when the user actively (re)selects a template, ignore any
+  // previously saved (possibly empty) value and apply the product's default task.
+  // On page load preferDefault is false so an intentionally saved value is kept.
+  async function loadInitialTaskOptionsForRow(tr, urlVal, apiKeyVal, verifyTls, preferDefault = false) {
+    const sel = tr.querySelector('.fi-ct-initial-task');
+    const templateId = tr.querySelector('.fi-ct-template').value;
+    const savedSet = preferDefault ? false : (tr.dataset.initialTaskSet === 'true');
+    const savedValue = preferDefault ? '' : (tr.dataset.initialTask || '');
+    if (!templateId) {
+      sel.innerHTML = initialTaskOptionsHtml([], tr.dataset.product, savedSet, savedValue);
+      return;
+    }
+    sel.innerHTML = '<option value="">Loading tasks...</option>';
+    let data;
+    try {
+      const resp = await fetch(SCRIPT_ROOT + '/config/flowintel-case-template-tasks', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({url: urlVal, api_key: apiKeyVal, verify_tls: verifyTls, template_id: templateId}),
+      });
+      data = await parseJsonResponse(resp);
+    } catch (_) {
+      data = {ok: false, error: 'Request failed'};
+    }
+    // On failure still render the saved value (initialTaskOptionsHtml keeps it),
+    // so an unreachable Flowintel never makes a configured task look like "None".
+    sel.innerHTML = initialTaskOptionsHtml(data.ok ? data.tasks : [], tr.dataset.product, savedSet, savedValue);
+  }
+
+  async function loadCaseTemplatesForRow(tableEl, urlVal, apiKeyVal, verifyTls) {
+    if (!tableEl || !urlVal || !apiKeyVal) return;
+    const rows = tableEl.querySelectorAll('tbody tr[data-product]');
+    rows.forEach((tr) => {
+      tr.querySelector('.fi-ct-template').innerHTML = '<option value="">Loading templates...</option>';
+      tr.querySelector('.fi-ct-initial-task').innerHTML = '<option value="">Loading tasks...</option>';
+    });
+    let data;
+    try {
+      const resp = await fetch(SCRIPT_ROOT + '/config/flowintel-case-templates', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({url: urlVal, api_key: apiKeyVal, verify_tls: verifyTls}),
+      });
+      data = await parseJsonResponse(resp);
+    } catch (_) {
+      data = {ok: false, error: 'Request failed'};
+    }
+    // Populate every template select first, synchronously, so the user can
+    // pick a template the moment the options appear without a later row's async
+    // task fetch clobbering that selection.
+    rows.forEach((tr) => {
+      const sel = tr.querySelector('.fi-ct-template');
+      const selectedId = tr.dataset.templateId || '';
+      // Pass the saved id so it stays selected, and so it is still shown as an
+      // option when the API list is unavailable or no longer contains it.
+      sel.innerHTML = caseTemplateOptionsHtml(data.ok ? data.templates : [], selectedId);
+    });
+    if (!data.ok) {
+      // Templates could not be loaded: still reflect any saved task per row
+      // instead of wiping it, so the configured values remain visible.
+      rows.forEach((tr) => {
+        tr.querySelector('.fi-ct-initial-task').innerHTML = initialTaskOptionsHtml(
+          [], tr.dataset.product, tr.dataset.initialTaskSet === 'true', tr.dataset.initialTask || '');
+      });
+      return;
+    }
+    // Load tasks only for rows that already have a template selected (saved
+    // instances). Rows without a template get their tasks when the user picks
+    // one, so this loader never overwrites an in-progress selection.
+    for (const tr of rows) {
+      if (tr.querySelector('.fi-ct-template').value) {
+        await loadInitialTaskOptionsForRow(tr, urlVal, apiKeyVal, verifyTls);
+      } else {
+        tr.querySelector('.fi-ct-initial-task').innerHTML = initialTaskOptionsHtml(
+          [], tr.dataset.product, tr.dataset.initialTaskSet === 'true', tr.dataset.initialTask || '');
+      }
+    }
+  }
+
+  function collectCaseTemplates(tableEl) {
+    const result = {};
+    if (!tableEl) return result;
+    tableEl.querySelectorAll('tbody tr[data-product]').forEach((tr) => {
+      result[tr.dataset.product] = {
+        enabled: tr.querySelector('.fi-ct-enabled').checked,
+        template_id: tr.querySelector('.fi-ct-template').value,
+        initial_task: tr.querySelector('.fi-ct-initial-task').value,
+      };
+    });
+    return result;
+  }
+
+  function bindCaseTemplateTable(table, getConnDetails) {
+    if (!table) return;
+    table.querySelectorAll('tbody tr[data-product]').forEach((tr) => {
+      tr.querySelector('.fi-ct-template').addEventListener('change', () => {
+        const {url, apiKey, verifyTls} = getConnDetails();
+        if (!url || !apiKey) return;
+        tr.dataset.templateId = tr.querySelector('.fi-ct-template').value;
+        loadInitialTaskOptionsForRow(tr, url, apiKey, verifyTls, true);
+      });
+    });
+  }
+
+  function resetNewCaseTemplateTable() {
+    const table = document.getElementById('new-fi-case-template-table');
+    table.querySelector('tbody').innerHTML = caseTemplateTableRowsHtml('Test connection to load templates');
+    bindNewCaseTemplateTable();
+  }
+
+  function bindNewCaseTemplateTable() {
+    bindCaseTemplateTable(document.getElementById('new-fi-case-template-table'), () => ({
+      url: document.getElementById('new-fi-url').value.trim(),
+      apiKey: document.getElementById('new-fi-api-key').value.trim(),
+      verifyTls: document.getElementById('new-fi-verify-tls').checked,
+    }));
+  }
+
+  function bindApiKeyToggle(row) {
+    row.querySelectorAll('.api-key-toggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const input = btn.closest('.input-group').querySelector('.api-key-input');
+        const icon = btn.querySelector('i');
+        if (input.type === 'password') {
+          input.type = 'text';
+          icon.classList.replace('fa-eye', 'fa-eye-slash');
+        } else {
+          input.type = 'password';
+          icon.classList.replace('fa-eye-slash', 'fa-eye');
+        }
+      });
+    });
+  }
+
+  async function testConnection(urlVal, apiKeyVal, verifyTls, resultEl, btn, onSuccess) {
+    if (!urlVal || !apiKeyVal) {
+      resultEl.textContent = 'URL and API key required';
+      resultEl.className = 'small text-warning';
+      return;
+    }
+    btn.disabled = true;
+    resultEl.textContent = 'Testing…';
+    resultEl.className = 'small text-muted';
+    try {
+      const resp = await fetch(SCRIPT_ROOT + '/config/test-flowintel-connection', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({url: urlVal, api_key: apiKeyVal, verify_tls: verifyTls}),
+      });
+      const data = await parseJsonResponse(resp);
+      btn.disabled = false;
+      if (data.ok) {
+        resultEl.textContent = 'Connected';
+        resultEl.className = 'small text-success';
+        if (onSuccess) onSuccess();
+      } else {
+        resultEl.textContent = data.error || 'Connection failed';
+        resultEl.className = 'small text-danger';
+      }
+    } catch (_) {
+      btn.disabled = false;
+      resultEl.textContent = 'Request failed';
+      resultEl.className = 'small text-danger';
+    }
+    setTimeout(() => { resultEl.textContent = ''; }, 5000);
+  }
+
+  function bindRow(row) {
+    const toggleBtn = row.querySelector('.toggle-fi-form');
+    const form = row.querySelector('.fi-form');
+    const deleteBtn = row.querySelector('.delete-fi-btn');
+    const testBtn = row.querySelector('.test-fi-connection-btn');
+    const testResult = row.querySelector('.test-fi-connection-result');
+    const saveBtn = row.querySelector('.save-fi-btn');
+    const saveResult = row.querySelector('.save-fi-result');
+
+    bindApiKeyToggle(row);
+    bindCaseTemplateTable(row.querySelector('.fi-case-template-table'), () => ({
+      url: row.querySelector('.fi-url').value.trim(),
+      apiKey: row.querySelector('.fi-api-key').value.trim(),
+      verifyTls: row.querySelector('.fi-verify-tls').checked,
+    }));
+
+    if (toggleBtn && form) {
+      toggleBtn.addEventListener('click', () => {
+        const open = form.style.display !== 'none';
+        form.style.display = open ? 'none' : '';
+        toggleBtn.textContent = open ? 'Edit' : 'Close';
+      });
+    }
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        const originalId = row.dataset.originalId;
+        if (!confirm('Delete this Flowintel instance?')) return;
+        const resp = await fetch(SCRIPT_ROOT + '/config/delete-flowintel-instance', {
+          method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({instance_id: originalId}),
+        });
+        const data = await parseJsonResponse(resp);
+        if (data.ok) {
+          row.remove();
+          const noMsg = document.getElementById('no-flowintel-msg');
+          if (noMsg && !list.querySelector('.flowintel-instance-row')) noMsg.classList.remove('d-none');
+        } else {
+          alert('Delete failed: ' + (data.error || 'unknown'));
+        }
+      });
+    }
+
+    if (testBtn && testResult) {
+      testBtn.addEventListener('click', () => {
+        const urlVal = row.querySelector('.fi-url').value.trim();
+        const apiKeyVal = row.querySelector('.fi-api-key').value.trim();
+        const verifyTls = row.querySelector('.fi-verify-tls').checked;
+        testConnection(urlVal, apiKeyVal, verifyTls, testResult, testBtn, () => {
+          loadCaseTemplatesForRow(row.querySelector('.fi-case-template-table'), urlVal, apiKeyVal, verifyTls);
+        });
+      });
+    }
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        const originalId = row.dataset.originalId;
+        const name = row.querySelector('.fi-name').value.trim();
+        const url = row.querySelector('.fi-url').value.trim();
+        const apiKey = row.querySelector('.fi-api-key').value.trim();
+        const enabled = row.querySelector('.fi-enabled').checked;
+        const verifyTls = row.querySelector('.fi-verify-tls').checked;
+        if (!name) { saveResult.textContent = 'Name required'; saveResult.className = 'save-fi-result small text-danger'; return; }
+        if (!url) { saveResult.textContent = 'URL required'; saveResult.className = 'save-fi-result small text-danger'; return; }
+        const caseTemplates = collectCaseTemplates(row.querySelector('.fi-case-template-table'));
+        const resp = await fetch(SCRIPT_ROOT + '/config/save-flowintel-instance', {
+          method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({original_id: originalId, name, url, api_key: apiKey, enabled, verify_tls: verifyTls, case_templates: caseTemplates}),
+        });
+        const data = await parseJsonResponse(resp);
+        if (data.ok) {
+          row.dataset.originalId = data.new_id;
+          row.querySelector('.fi-display-name').textContent = name;
+          const badge = row.querySelector('.fi-display-enabled');
+          badge.textContent = enabled ? 'Enabled' : 'Disabled';
+          badge.className = 'badge ms-1 fi-display-enabled ' + (enabled ? 'bg-success' : 'bg-secondary');
+          saveResult.textContent = 'Saved';
+          saveResult.className = 'save-fi-result small text-success';
+          setTimeout(() => { saveResult.textContent = ''; }, 3000);
+        } else {
+          saveResult.textContent = data.error || 'Save failed';
+          saveResult.className = 'save-fi-result small text-danger';
+        }
+      });
+    }
+  }
+
+  list.querySelectorAll('.flowintel-instance-row').forEach((row) => {
+    bindRow(row);
+    loadCaseTemplatesForRow(
+      row.querySelector('.fi-case-template-table'),
+      row.querySelector('.fi-url').value.trim(),
+      row.querySelector('.fi-api-key').value.trim(),
+      row.querySelector('.fi-verify-tls').checked
+    );
+  });
+
+  bindNewCaseTemplateTable();
+
+  const testNewBtn = document.getElementById('test-new-fi-btn');
+  if (testNewBtn) {
+    testNewBtn.addEventListener('click', () => {
+      const urlVal = document.getElementById('new-fi-url').value.trim();
+      const apiKeyVal = document.getElementById('new-fi-api-key').value.trim();
+      const verifyTls = document.getElementById('new-fi-verify-tls').checked;
+      const resultEl = document.getElementById('test-new-fi-result');
+      testConnection(urlVal, apiKeyVal, verifyTls, resultEl, testNewBtn, () => {
+        loadCaseTemplatesForRow(document.getElementById('new-fi-case-template-table'), urlVal, apiKeyVal, verifyTls);
+      });
+    });
+  }
+
+  const addBtn = document.getElementById('add-fi-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      const nameEl = document.getElementById('new-fi-name');
+      const urlEl = document.getElementById('new-fi-url');
+      const apiKeyEl = document.getElementById('new-fi-api-key');
+      const enabledEl = document.getElementById('new-fi-enabled');
+      const verifyTlsEl = document.getElementById('new-fi-verify-tls');
+      const resultEl = document.getElementById('add-fi-result');
+      const name = nameEl.value.trim();
+      const url = urlEl.value.trim();
+      const apiKey = apiKeyEl.value.trim();
+      const enabled = enabledEl.checked;
+      const verifyTls = verifyTlsEl.checked;
+      if (!name) { resultEl.textContent = 'Name required'; resultEl.className = 'small text-danger'; return; }
+      if (!url) { resultEl.textContent = 'URL required'; resultEl.className = 'small text-danger'; return; }
+      const newCaseTemplateTable = document.getElementById('new-fi-case-template-table');
+      const caseTemplates = collectCaseTemplates(newCaseTemplateTable);
+      const resp = await fetch(SCRIPT_ROOT + '/config/save-flowintel-instance', {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({name, url, api_key: apiKey, enabled, verify_tls: verifyTls, case_templates: caseTemplates}),
+      });
+      const data = await parseJsonResponse(resp);
+      if (data.ok) {
+        const noMsg = document.getElementById('no-flowintel-msg');
+        if (noMsg) noMsg.classList.add('d-none');
+        const tpl = document.createElement('div');
+        tpl.className = 'flowintel-instance-row card content-card mb-3';
+        tpl.dataset.originalId = data.new_id;
+        tpl.innerHTML = `
+          <div class="card-header d-flex align-items-center gap-2 px-3 py-2">
+            <img src="{{ url_for('static', filename='flowintel-icon.png') }}" alt="Flowintel" style="height:16px;width:auto;">
+            <span class="fw-semibold fi-display-name">${name}</span>
+            <span class="badge ${enabled ? 'bg-success' : 'bg-secondary'} ms-1 fi-display-enabled">${enabled ? 'Enabled' : 'Disabled'}</span>
+            <div class="ms-auto d-flex gap-2 align-items-center">
+              <button type="button" class="btn btn-sm btn-outline-secondary toggle-fi-form">Edit</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary test-fi-connection-btn" title="Check connectivity to this Flowintel instance"><i class="fas fa-plug"></i></button>
+              <span class="test-fi-connection-result small"></span>
+              <button type="button" class="btn btn-sm btn-outline-danger delete-fi-btn">Delete</button>
+            </div>
+          </div>
+          <div class="card-body fi-form" style="display:none;">
+            <div class="row g-3">
+              <div class="col-sm-5"><label class="form-label">Name</label><input type="text" class="form-control fi-name" value="${name}"></div>
+              <div class="col-sm-7"><label class="form-label">URL</label><input type="text" class="form-control fi-url" value="${url}"></div>
+              <div class="col-sm-7"><label class="form-label">API key</label>
+                <div class="input-group"><input type="password" class="form-control font-monospace api-key-input fi-api-key" value="${apiKey}">
+                <button class="btn btn-outline-secondary api-key-toggle" type="button" title="Show/hide"><i class="fas fa-eye"></i></button></div>
+              </div>
+              <div class="col-sm-5"><div class="form-check form-switch mt-2"><input class="form-check-input fi-enabled" type="checkbox" ${enabled ? 'checked' : ''}><label class="form-check-label">Enabled</label></div></div>
+              <div class="col-sm-5"><div class="form-check form-switch mt-2"><input class="form-check-input fi-verify-tls" type="checkbox" ${verifyTls ? 'checked' : ''}><label class="form-check-label">Verify TLS certificate</label></div></div>
+            </div>
+            <div class="mt-3">
+              <label class="form-label d-block mb-1">Case templates for CTI products</label>
+              <table class="table table-sm align-middle mb-1 fi-case-template-table">
+                <thead>
+                  <tr><th style="width:90px;">Status</th><th>CTI product</th><th>Case template</th><th>Initial task</th></tr>
+                </thead>
+                <tbody>${caseTemplateTableRowsHtml('Loading templates...')}</tbody>
+              </table>
+              <div class="form-text">Enable to create a Flowintel case from the selected template when this product is published.</div>
+            </div>
+            <div class="d-flex gap-2 mt-3"><button type="button" class="btn btn-sm btn-primary save-fi-btn">Save</button><span class="save-fi-result small align-self-center"></span></div>
+          </div>`;
+        list.insertBefore(tpl, list.firstChild);
+        bindRow(tpl);
+        // Carry the just-saved case-template selections onto the new row so it
+        // reflects them (and a later Save on that row keeps them).
+        tpl.querySelectorAll('.fi-case-template-table tbody tr[data-product]').forEach((tr) => {
+          const ct = caseTemplates[tr.dataset.product];
+          if (!ct) return;
+          tr.dataset.templateId = ct.template_id || '';
+          tr.dataset.initialTask = ct.initial_task || '';
+          tr.dataset.initialTaskSet = 'true';
+          tr.querySelector('.fi-ct-enabled').checked = !!ct.enabled;
+        });
+        loadCaseTemplatesForRow(tpl.querySelector('.fi-case-template-table'), url, apiKey, verifyTls);
+        resetNewCaseTemplateTable();
+        nameEl.value = ''; urlEl.value = ''; apiKeyEl.value = ''; enabledEl.checked = true; verifyTlsEl.checked = true;
+        resultEl.textContent = 'Instance added';
+        resultEl.className = 'small text-success';
+        setTimeout(() => { resultEl.textContent = ''; }, 3000);
+      } else {
+        resultEl.textContent = data.error || 'Failed';
+        resultEl.className = 'small text-danger';
+      }
+    });
+  }
+})();
+
+// ── Styling tab ─────────────────────────────────────────────────────────────
+(function () {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // Sync colour picker ↔ hex text input
+  document.querySelectorAll('.color-hex-input').forEach(function(hexInput) {
+    const targetName = hexInput.dataset.target;
+    const picker = document.querySelector('input[type="color"][name="' + targetName + '"]');
+    if (!picker) return;
+    picker.addEventListener('input', function() { hexInput.value = picker.value; });
+    hexInput.addEventListener('change', function() {
+      if (/^#[0-9a-fA-F]{6}$/.test(hexInput.value)) picker.value = hexInput.value;
+    });
+  });
+
+  // Logo upload
+  const uploadBtn = document.getElementById('logo-upload-btn');
+  const fileInput = document.getElementById('logo-file-input');
+  const uploadResult = document.getElementById('logo-upload-result');
+  if (uploadBtn && fileInput) {
+    uploadBtn.addEventListener('click', async function() {
+      const file = fileInput.files[0];
+      if (!file) { uploadResult.textContent = 'Select a file first'; uploadResult.className = 'small text-warning'; return; }
+      const fd = new FormData();
+      fd.append('logo', file);
+      fd.append('csrf_token', csrfToken);
+      uploadBtn.disabled = true;
+      uploadResult.textContent = 'Uploading…';
+      uploadResult.className = 'small text-muted';
+      const resp = await fetch(SCRIPT_ROOT + '/config/upload-logo', {method: 'POST', headers: {'X-CSRF-Token': csrfToken}, body: fd});
+      const data = await resp.json();
+      uploadBtn.disabled = false;
+      if (data.ok) {
+        uploadResult.textContent = 'Saved. Reload the page to see the preview.';
+        uploadResult.className = 'small text-success';
+      } else {
+        uploadResult.textContent = data.error || 'Upload failed';
+        uploadResult.className = 'small text-danger';
+      }
+    });
+  }
+})();
+
+/* ── Threat actor types dynamic table ─────────────────────────────── */
+(function() {
+  var initialData = {{ cfg.THREAT_ACTOR_TYPES | tojson }};
+  var tbody = document.getElementById('tat-tbody');
+  var jsonInput = document.getElementById('tat-json');
+  var addBtn = document.getElementById('add-tat-btn');
+  if (!tbody || !jsonInput) return;
+
+  function syncJson() {
+    var types = [];
+    tbody.querySelectorAll('tr').forEach(function(row) {
+      var nameEl = row.querySelector('.tat-name');
+      var descEl = row.querySelector('.tat-desc');
+      var name = (nameEl ? nameEl.value : '').trim();
+      var desc = (descEl ? descEl.value : '').trim();
+      if (name || desc) types.push({name: name, description: desc});
+    });
+    jsonInput.value = JSON.stringify(types);
+  }
+
+  function makeRow(name, desc) {
+    var tr = document.createElement('tr');
+
+    var tdName = document.createElement('td');
+    tdName.style.verticalAlign = 'top';
+    tdName.style.padding = '.4rem .75rem';
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'form-control form-control-sm tat-name';
+    nameInput.value = name;
+    nameInput.placeholder = 'Type name';
+    nameInput.addEventListener('input', syncJson);
+    tdName.appendChild(nameInput);
+
+    var tdDesc = document.createElement('td');
+    tdDesc.style.padding = '.4rem .5rem .4rem .75rem';
+    var descArea = document.createElement('textarea');
+    descArea.className = 'form-control form-control-sm tat-desc';
+    descArea.rows = 3;
+    descArea.placeholder = 'Description';
+    descArea.style.resize = 'vertical';
+    descArea.textContent = desc;
+    descArea.addEventListener('input', syncJson);
+    tdDesc.appendChild(descArea);
+
+    var tdDel = document.createElement('td');
+    tdDel.style.verticalAlign = 'top';
+    tdDel.style.padding = '.4rem .5rem';
+    var delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-xs btn-outline-danger';
+    delBtn.title = 'Remove this type';
+    delBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+    delBtn.addEventListener('click', function() { tr.remove(); syncJson(); });
+    tdDel.appendChild(delBtn);
+
+    tr.appendChild(tdName);
+    tr.appendChild(tdDesc);
+    tr.appendChild(tdDel);
+    return tr;
+  }
+
+  (initialData || []).forEach(function(t) {
+    tbody.appendChild(makeRow(t.name || '', t.description || ''));
+  });
+  syncJson();
+
+  if (addBtn) {
+    addBtn.addEventListener('click', function() {
+      var row = makeRow('', '');
+      tbody.appendChild(row);
+      row.querySelector('.tat-name').focus();
+      syncJson();
+    });
+  }
+
+  /* Sync before the enclosing form submits */
+  var form = tbody.closest('form');
+  if (form) form.addEventListener('submit', syncJson);
+})();
+
+/* ── Migration runner ─────────────────────────────────────────────── */
+(function() {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  async function runMigration(row, apply) {
+    const id = row.dataset.migrationId;
+    const output = row.querySelector('.migration-output');
+    const buttons = row.querySelectorAll('button');
+    buttons.forEach(b => b.disabled = true);
+    output.classList.remove('d-none', 'text-danger', 'text-success');
+    output.textContent = apply ? 'Running migration…' : 'Running dry-run…';
+    try {
+      const resp = await fetch(SCRIPT_ROOT + '/config/run-migration', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({id: id, apply: apply}),
+      });
+      const data = await resp.json();
+      if (data.ok || typeof data.output === 'string') {
+        output.textContent = (data.output || '').trim() || '(no output)';
+        output.classList.add(data.ok ? 'text-success' : 'text-danger');
+      } else {
+        output.textContent = data.error || 'Migration failed';
+        output.classList.add('text-danger');
+      }
+    } catch (e) {
+      output.textContent = 'Migration failed: ' + e;
+      output.classList.add('text-danger');
+    } finally {
+      buttons.forEach(b => b.disabled = false);
+    }
+  }
+
+  document.querySelectorAll('.migration-row').forEach(function(row) {
+    const preview = row.querySelector('.migration-preview');
+    const run = row.querySelector('.migration-run');
+    if (preview) preview.addEventListener('click', () => runMigration(row, false));
+    if (run) run.addEventListener('click', function() {
+      if (confirm('Run this migration? It will modify data in MISP.')) runMigration(row, true);
+    });
+  });
+})();
+
+// Deferred: base.html loads Bootstrap at the foot of the body, so it does not
+// exist yet while this block is being parsed. Calling it here threw, and the
+// throw took out everything below it in this script.
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+});
+
+// ── Unsaved-change tracking ────────────────────────────────────────────────
+// Each tab's save button starts disabled and only enables once something on
+// that tab changes; leaving the page with unsaved edits prompts a warning.
+// The prompts and AI tabs save over AJAX and have their own buttons, so they
+// are tracked as separate groups from the main "Save configuration" form.
+window.cfgDirty = (function() {
+  const form = document.getElementById('cfg-form');
+  const groups = {
+    form: { dirty: false, buttons: () => form ? form.querySelectorAll('button[type="submit"]') : [] },
+    prompts: { dirty: false, buttons: () => [document.getElementById('save-prompts-btn')].filter(Boolean) },
+    ai: { dirty: false, buttons: () => [document.getElementById('save-ai-btn')].filter(Boolean) },
+  };
+  let submitting = false;
+
+  function setDirty(name, dirty) {
+    const g = groups[name];
+    if (!g) return;
+    g.dirty = dirty;
+    g.buttons().forEach((b) => { b.disabled = !dirty; });
+  }
+  Object.keys(groups).forEach((name) => setDirty(name, false));
+
+  function groupFor(target) {
+    if (!target || !target.closest) return null;
+    if (target.closest('#tab-prompts')) return 'prompts';
+    if (target.closest('#tab-ai')) return 'ai';
+    if (form && form.contains(target)) return 'form';
+    return null;
+  }
+  ['input', 'change'].forEach((evt) => {
+    document.addEventListener(evt, (e) => {
+      const name = groupFor(e.target);
+      if (name) setDirty(name, true);
+    }, true);
+  });
+
+  if (form) form.addEventListener('submit', () => { submitting = true; });
+  // The guard in base.html does the asking, on leaving the page and on any link
+  // out of it; this only answers whether a tab still holds unsaved edits.
+  (window.zsazsaUnsavedChecks = window.zsazsaUnsavedChecks || []).push(
+    () => !submitting && Object.values(groups).some((g) => g.dirty));
+
+  return {
+    clean: (name) => setDirty(name, false),
+    dirty: (name) => setDirty(name, true),
+  };
+})();
+
+// ── Single sign-on check ──────────────────────────────────────────────────────
+// Runs against the cookies of this very request, which is the only place that
+// can see what the browser actually sends to zsazsa.
+(function () {
+  const btn = document.getElementById('test-sso-btn');
+  const out = document.getElementById('test-sso-result');
+  if (!btn || !out) return;
+
+  const row = (c) => `<div class="d-flex gap-2 align-items-start">
+      <i class="fas ${c.ok ? 'fa-circle-check text-success' : 'fa-circle-xmark text-danger'} mt-1"></i>
+      <div><strong>${escapeHtml(c.label)}:</strong> ${escapeHtml(c.detail)}</div>
+    </div>`;
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  btn.addEventListener('click', async () => {
+    out.innerHTML = '<span class="text-muted">Checking…</span>';
+    try {
+      const resp = await fetch(SCRIPT_ROOT + '/config/test-sso');
+      const data = await resp.json();
+      if (!data.ok) {
+        out.innerHTML = `<span class="text-danger">${escapeHtml(data.error || 'Check failed')}</span>`;
+        return;
+      }
+      out.innerHTML = data.checks.map(row).join('')
+        + (data.hint ? `<div class="alert alert-warning py-2 px-3 mt-2 mb-0">${escapeHtml(data.hint)}</div>` : '');
+    } catch (e) {
+      out.innerHTML = '<span class="text-danger">Could not run the check.</span>';
+    }
+  });
+})();
+
+</script>
+{% endblock %}

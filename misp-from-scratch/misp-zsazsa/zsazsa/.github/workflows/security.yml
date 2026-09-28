@@ -1,0 +1,77 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # A dependency becomes vulnerable without anyone touching this repository,
+    # so the audit has to run on a clock as well as on a change.
+    - cron: "0 6 * * 1"
+
+# Least privilege: neither job writes anything back.
+permissions:
+  contents: read
+
+# On a schedule event github.ref is the default branch, the same value a push
+# to main gives, so the event name keeps the weekly run and a push to main in
+# separate groups instead of letting whichever starts second cancel the other.
+concurrency:
+  group: security-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: leaked secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history: a key committed and then removed is still in the history
+      # and still has to be rotated, so the whole log is what gets scanned.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # The gitleaks binary, not gitleaks-action: the action is commercially
+      # licensed and wants a GITLEAKS_LICENSE for repositories owned by an
+      # organisation, which this one is. The scanner itself is MIT.
+      - name: Install gitleaks
+        env:
+          VERSION: 8.30.1
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks version
+
+      # config/__init__.py holds the MISP API keys and is gitignored, but the
+      # ignore rules only cover the names we thought of; this covers the rest.
+      - name: Scan history
+        run: ./gitleaks git . --redact --verbose
+
+  dependencies:
+    name: known vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # pip audits the environment it is installed in, itself included, and a
+      # runner's bundled pip lags the advisory feed by weeks. Without this the
+      # job goes red for pip rather than for anything zsazsa depends on.
+      - run: pip install --upgrade pip
+
+      # requirements.txt pins ranges, so this resolves the newest version in
+      # each range: the same thing a fresh install gets, which is what wants
+      # auditing.
+      - run: pip install -r requirements.txt
+      - run: pip install 'pip-audit>=2.7,<3'
+
+      # Audits the resolved environment rather than the requirements file, so a
+      # vulnerable transitive dependency is caught too. --strict fails the job
+      # when a package cannot be checked, instead of passing it silently.
+      - run: pip-audit --strict --progress-spinner off

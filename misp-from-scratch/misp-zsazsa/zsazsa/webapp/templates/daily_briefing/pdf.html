@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" data-tlp="{{ briefing.tlp | slug }}">
+<head>
+  <meta charset="utf-8">
+  <title>Daily Threat Briefing - {{ briefing.date or 'draft' }}</title>
+  <link rel="stylesheet" href="{{ css_url }}">
+  <style>
+    :root {
+      --c1: {{ brand.color1 }};
+      --c2: {{ brand.color2 }};
+      --c3: {{ brand.color3 }};
+    }
+  </style>
+</head>
+<body>
+{% import "_pdf_header.html" as header %}
+{% from "_macros.html" import story_scope %}
+
+{{ header.doc_header(brand, doc_label='Daily Threat Briefing',
+                     title=briefing.title or briefing.date or 'Briefing',
+                     tlp=briefing.tlp,
+                     doc_id='Briefing ' ~ (briefing.date or 'draft')) }}
+
+<div class="meta-block">
+  <div class="meta-grid">
+    {{ header.meta_item('Date', briefing.date or '-') }}
+    {{ header.meta_item('Author', briefing.author or '-') }}
+    {{ header.meta_item('Stories', briefing.stories | length) }}
+    {{ header.tlp_meta_item(briefing.tlp) }}
+  </div>
+</div>
+
+{# ── Summary ──────────────────────────────────────────────────── #}
+{% if briefing.summary %}
+<div class="section-heading">Briefing summary</div>
+<div class="section-box">
+  {{ briefing.summary | md }}
+</div>
+{% endif %}
+
+{# ── Stories ──────────────────────────────────────────────────── #}
+{% for story in briefing.stories %}
+<div class="story-block">
+  <div class="story-header">
+    <span class="story-number">{{ loop.index }}</span>
+    <span class="story-title">{{ story.title or '(untitled)' }}</span>
+  </div>
+  <div class="story-body">
+    {% if story.content %}{{ story.html | safe }}{% else %}<p>(no content)</p>{% endif %}
+
+    <div class="story-meta">
+      {% if story.source_url %}
+      <div class="scope-row"><span class="pretext">Source:</span> {{ story.source_url }}</div>
+      {% endif %}
+      {# Scope is labelled per category, the same way the e-mail presents it. #}
+      {{ story_scope(story, 'scope-tag') }}
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="section-box"><p class="no-content">No stories added.</p></div>
+{% endfor %}
+
+{# ── Scope summary ────────────────────────────────────────────── #}
+{% if scope_summary %}
+<div class="section-heading">Scope summary</div>
+<div class="section-box">
+  {% for label, ranked in scope_summary %}
+  <div class="scope-summary-group">
+    <span class="pretext">{{ label }}:</span><br>
+    {% for value, count in ranked %}
+    <span class="scope-tag {{ 'scope-tag-repeat' if count > 1 else '' }}">{{ value }}{% if count > 1 %} &times;{{ count }}{% endif %}</span>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ── Escalations ──────────────────────────────────────────────── #}
+{% if briefing.escalations %}
+<div class="section-heading">Escalations</div>
+<div class="section-box">
+  <p style="white-space:pre-wrap;">{{ briefing.escalations }}</p>
+</div>
+{% endif %}
+
+{# ── Notes ────────────────────────────────────────────────────── #}
+{% if briefing.notes %}
+<div class="section-heading">Notes</div>
+<div class="section-box">
+  <p style="white-space:pre-wrap;">{{ briefing.notes }}</p>
+</div>
+{% endif %}
+
+{# ── Detection rules ──────────────────────────────────────────── #}
+{% if briefing.detection_rules %}
+<div class="section-heading">Detection rules</div>
+<div class="section-box">
+  <p style="white-space:pre-wrap;">{{ briefing.detection_rules }}</p>
+</div>
+{% endif %}
+
+</body>
+</html>

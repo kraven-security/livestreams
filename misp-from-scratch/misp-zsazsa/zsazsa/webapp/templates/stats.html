@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}Statistics | zsazsa CTI{% endblock %}
+{% block page_title %}Statistics{% endblock %}
+
+{% block content %}
+
+{% if program %}
+<div class="card content-card mb-4">
+  <div class="card-header"><i class="fas fa-heart-pulse me-2"></i>CTI program health</div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="text-muted small">Open RFIs</div>
+        <div class="h3 mb-0">{{ program.rfis.open }}
+          {% if program.rfis.overdue %}
+          <span class="badge text-bg-danger ms-1">{{ program.rfis.overdue }} overdue</span>
+          {% endif %}
+        </div>
+        <div class="text-muted small">{{ program.rfis.total }} total RFIs</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">RFI feedback collected</div>
+        <div class="h3 mb-0">{{ program.rfis.pct_feedback_collected }}%</div>
+        <div class="text-muted small">{{ program.rfis.feedback_collected }} of {{ program.rfis.total }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">RFI on-time delivery</div>
+        <div class="h3 mb-0">{{ program.rfis.pct_on_time }}%</div>
+        <div class="text-muted small">of feedback received</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">Stakeholder coverage</div>
+        <div class="h3 mb-0">{{ program.stakeholder_coverage.pct_covered }}%</div>
+        <div class="text-muted small">{{ program.stakeholder_coverage.with_pir }} stakeholders linked to a PIR</div>
+      </div>
+    </div>
+
+    <hr class="my-3">
+
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="text-muted small">Products tagged with linked PIR</div>
+        <div class="h3 mb-0">{{ program.products.pct_with_pir_link }}%</div>
+        <div class="text-muted small">{{ program.products.with_pir_link }} of {{ program.products.total }} products</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">Products with feedback</div>
+        <div class="h3 mb-0">{{ program.products.pct_with_feedback }}%</div>
+        <div class="text-muted small">{{ program.products.with_feedback }} of {{ program.products.total }} products</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">PIR coverage (last 90 days)</div>
+        <div class="h3 mb-0">{{ program.pir_coverage.pct }}%</div>
+        <div class="text-muted small">{{ program.pir_coverage.covered }} of {{ program.pir_coverage.covered + program.pir_coverage.uncovered }} active PIRs with a product</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">Products (7 / 30 days)</div>
+        <div class="h3 mb-0">{{ program.products.last_7d }} <span style="font-size:.9rem;font-weight:400;color:var(--text-muted)">/ {{ program.products.last_30d }}</span></div>
+        <div class="text-muted small">{{ program.products.total }} total products</div>
+      </div>
+    </div>
+
+    <hr class="my-3">
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="text-muted small mb-2">RFIs by status</div>
+        <ul class="list-unstyled small mb-0">
+          {% for status, n in program.rfis.by_status.items() %}
+          <li>{{ status }}: <strong>{{ n }}</strong></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    {% if program.products.by_type %}
+    <hr class="my-3">
+    <div class="text-muted small mb-2">Products by type</div>
+    {% for ptype, n in program.products.by_type.items() %}
+      <a href="{{ url_for('products.index', type=ptype) }}" class="badge text-bg-light text-decoration-none me-1 mb-1">
+        {{ ptype }} <span class="ms-1 fw-bold">{{ n }}</span>
+      </a>
+    {% endfor %}
+    {% endif %}
+
+    <hr class="my-3">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="text-muted small mb-2">PIRs by intel level</div>
+        {% for lvl, n in program.intel_levels.pir.most_common() %}
+          <span class="badge text-bg-light me-1">{{ lvl }} <span class="fw-bold ms-1">{{ n }}</span></span>
+        {% else %}
+          <span class="text-muted small">-</span>
+        {% endfor %}
+      </div>
+      <div class="col-md-6">
+        <div class="text-muted small mb-2">GIRs by intel level</div>
+        {% for lvl, n in program.intel_levels.gir.most_common() %}
+          <span class="badge text-bg-light me-1">{{ lvl }} <span class="fw-bold ms-1">{{ n }}</span></span>
+        {% else %}
+          <span class="text-muted small">-</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if actor_type_product_counts %}
+<div class="card content-card mb-4">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="fas fa-user-shield me-2"></i>Products by threat actor type</span>
+    <span class="badge text-bg-light" style="font-size:.7rem;font-weight:400;">daily briefings + flash intel + threat actor profiles</span>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Threat actor type</th>
+            <th class="text-end">Daily briefings</th>
+            <th class="text-end">Flash intel alerts</th>
+            <th class="text-end">Threat actor profiles</th>
+            <th class="text-end">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in actor_type_product_counts %}
+          <tr>
+            <td>{{ row.actor_type }}</td>
+            <td class="text-end">{{ row.daily_briefings }}</td>
+            <td class="text-end">{{ row.flash_intel_alerts }}</td>
+            <td class="text-end">{{ row.threat_actor_profiles }}</td>
+            <td class="text-end fw-semibold">{{ row.total }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if maturity_signals %}
+<div class="card content-card mb-4">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span><i class="fas fa-chart-line me-2"></i>Observable maturity signals (CTI-CMM indicative)</span>
+    <span class="badge text-bg-secondary" style="font-size:.7rem;font-weight:400;">based on zsazsa artifacts</span>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">Derived from what zsazsa can observe. These are indicative signals, not a definitive CTI-CMM score. Use the full self-assessment for an authoritative measure.</p>
+    <div class="row g-3">
+      {% for sig in maturity_signals %}
+      <div class="col-md-3">
+        <div class="border rounded p-3 h-100">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="fw-semibold small">{{ sig.domain }}</span>
+            <span class="badge text-bg-{{ sig.color }}">{{ sig.level }}</span>
+          </div>
+          {% if sig.observed %}
+          <ul class="list-unstyled mb-0" style="font-size:.78rem;color:var(--text-muted);">
+            {% for obs in sig.observed %}
+            <li class="mb-1"><i class="fas fa-check text-success me-1"></i>{{ obs }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if sig.gaps %}
+          <ul class="list-unstyled mb-0 mt-2" style="font-size:.78rem;color:var(--text-muted);">
+            {% for gap in sig.gaps %}
+            <li class="mb-1"><i class="fas fa-arrow-up text-warning me-1"></i>{{ gap }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- CTI program coverage -->
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <a href="{{ url_for('requirements.pir_list') }}" class="text-decoration-none">
+    <div class="stat-card">
+      <div class="stat-icon" style="--icon-color: var(--accent-blue);"><i class="fas fa-star"></i></div>
+      <div class="stat-body">
+        <div class="stat-number">{{ active_pir_count }} <span style="font-size:1rem;font-weight:400;color:var(--text-muted)">/ {{ pir_count }}</span></div>
+        <div class="stat-label">Active / total PIRs</div>
+      </div>
+    </div>
+    </a>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <a href="{{ url_for('requirements.gir_list') }}" class="text-decoration-none">
+    <div class="stat-card">
+      <div class="stat-icon" style="--icon-color: var(--accent-green);"><i class="fas fa-list-check"></i></div>
+      <div class="stat-body">
+        <div class="stat-number">{{ active_gir_count }} <span style="font-size:1rem;font-weight:400;color:var(--text-muted)">/ {{ gir_count }}</span></div>
+        <div class="stat-label">Active / total GIRs</div>
+      </div>
+    </div>
+    </a>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="stat-card">
+      <div class="stat-icon" style="--icon-color: var(--accent-orange);"><i class="fas fa-users"></i></div>
+      <div class="stat-body">
+        <div class="stat-number">{{ stakeholder_count }}</div>
+        <div class="stat-label">Stakeholders</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="stat-card">
+      <div class="stat-icon" style="--icon-color: {% if pirs_no_fp > 0 or girs_no_fp > 0 %}var(--accent-red){% else %}var(--accent-green){% endif %};">
+        <i class="fas fa-crosshairs"></i>
+      </div>
+      <div class="stat-body">
+        <div class="stat-number">{{ pirs_no_fp + girs_no_fp }}</div>
+        <div class="stat-label">Active requirements without scope items</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if pirs_no_fp > 0 or girs_no_fp > 0 %}
+<div class="alert alert-warning mb-4" style="font-size:.875rem;">
+  <i class="fas fa-triangle-exclamation me-2"></i>
+  {% if pirs_no_fp > 0 %}{{ pirs_no_fp }} active PIR{{ 's have' if pirs_no_fp != 1 else ' has' }} no scope items{% if girs_no_fp > 0 %}, and {% endif %}{% endif %}
+  {% if girs_no_fp > 0 %}{{ girs_no_fp }} active GIR{{ 's have' if girs_no_fp != 1 else ' has' }} no scope items{% endif %}.
+  Without scope items the analyser cannot match articles to these requirements.
+  <a href="{{ url_for('requirements.pir_list') }}" class="alert-link ms-1">Review PIRs</a> or
+  <a href="{{ url_for('requirements.gir_list') }}" class="alert-link">GIRs</a>.
+</div>
+{% endif %}
+
+{% if program and (program.collection_gaps.pirs_without_sources > 0 or program.collection_gaps.girs_without_sources > 0) %}
+<div class="alert alert-info mb-4" style="font-size:.875rem;">
+  <i class="fas fa-circle-info me-2"></i>
+  Collection gap:
+  {% if program.collection_gaps.pirs_without_sources > 0 %}
+    {{ program.collection_gaps.pirs_without_sources }} active PIR{{ 's have' if program.collection_gaps.pirs_without_sources != 1 else ' has' }} no collection sources mapped
+    {%- if program.collection_gaps.girs_without_sources > 0 %}, and {% endif %}
+  {% endif %}
+  {% if program.collection_gaps.girs_without_sources > 0 %}
+    {{ program.collection_gaps.girs_without_sources }} active GIR{{ 's have' if program.collection_gaps.girs_without_sources != 1 else ' has' }} no collection sources mapped
+  {% endif %}.
+  Map collection sources on each requirement so analysts know where to look.
+  <a href="{{ url_for('requirements.pir_list') }}" class="alert-link ms-1">Review PIRs</a>{% if program.collection_gaps.girs_without_sources > 0 %} or
+  <a href="{{ url_for('requirements.gir_list') }}" class="alert-link">GIRs</a>{% endif %}.
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card content-card">
+      <div class="card-header"><i class="fas fa-file-export me-2"></i>Export</div>
+      <div class="card-body d-flex flex-column gap-2">
+        <a href="{{ url_for('export.pirs') }}" class="btn btn-outline-primary btn-sm">
+          <i class="fas fa-download me-2"></i>PIRs as Markdown
+        </a>
+        <a href="{{ url_for('export.girs') }}" class="btn btn-outline-success btn-sm">
+          <i class="fas fa-download me-2"></i>GIRs as Markdown
+        </a>
+        <a href="{{ url_for('export.stakeholders') }}" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-download me-2"></i>Stakeholders as Markdown
+        </a>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card content-card">
+      <div class="card-header"><i class="fas fa-gauge-high me-2"></i>Program health</div>
+      <div class="card-body p-0">
+        <ul class="list-unstyled mb-0">
+          <li class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+            <span class="text-muted small">PIRs with scope items</span>
+            <span class="fw-semibold">{{ active_pir_count - pirs_no_fp }} / {{ active_pir_count }}</span>
+          </li>
+          <li class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+            <span class="text-muted small">GIRs with scope items</span>
+            <span class="fw-semibold">{{ active_gir_count - girs_no_fp }} / {{ active_gir_count }}</span>
+          </li>
+          <li class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center">
+            <span class="text-muted small">PIRs with an owner</span>
+            <span class="fw-semibold">-</span>
+          </li>
+          <li class="px-3 py-2 d-flex justify-content-between align-items-center">
+            <span class="text-muted small">Stakeholders with products</span>
+            <span class="fw-semibold">-</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

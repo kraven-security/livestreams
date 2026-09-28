@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if is_edit else 'New' }} threat landscape report | zsazsa CTI{% endblock %}
+{% block page_title %}{{ 'Edit' if is_edit else 'New' }} threat landscape report{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('threat_landscape.review') }}" class="btn btn-sm btn-outline-secondary">
+  <i class="fas fa-arrow-left me-1"></i> Back
+</a>
+{% endblock %}
+
+{% block content %}
+<form method="post" data-unsaved-warning>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="row g-4">
+
+    <!-- Left: main content -->
+    <div class="col-lg-8">
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-file-lines me-2"></i>Report details</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Title</label>
+              <input type="text" name="title" class="form-control"
+                     value="{{ tlr.title if tlr else '' }}" required
+                     placeholder="e.g. Q1 2026 Threat Landscape">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Reporting period</label>
+              <input type="text" name="reporting_period" class="form-control"
+                     value="{{ tlr.reporting_period if tlr else '' }}"
+                     placeholder="e.g. Q1 2026, January 2026">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">TLP</label>
+              <select name="tlp" class="form-select">
+                {% for lvl in tlp_levels %}
+                <option value="{{ lvl }}" {% if tlr and tlr.tlp == lvl %}selected{% elif not tlr and lvl == 'amber' %}selected{% endif %}>
+                  TLP:{{ lvl | upper }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Author</label>
+              <input type="text" name="author" class="form-control"
+                     value="{{ tlr.author if tlr else '' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Audience</label>
+              <input type="text" name="audience" class="form-control"
+                     value="{{ tlr.audience if tlr else '' }}"
+                     placeholder="Leadership, SOC, ...">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-triangle-exclamation me-2"></i>Top threats</div>
+        <div class="card-body">
+          <textarea name="top_threats" class="form-control font-monospace" rows="5"
+                    placeholder="Summarise the top threats observed during this period…">{{ tlr.top_threats if tlr else '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-user-secret me-2"></i>Trending threat actors</div>
+        <div class="card-body">
+          <textarea name="trending_actors" class="form-control font-monospace" rows="4"
+                    placeholder="Threat actors that increased in activity or relevance…">{{ tlr.trending_actors if tlr else '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-fire me-2"></i>Key incidents</div>
+        <div class="card-body">
+          <textarea name="key_incidents" class="form-control font-monospace" rows="5"
+                    placeholder="Notable incidents, campaigns, or vulnerabilities during the period…">{{ tlr.key_incidents if tlr else '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-shield me-2"></i>Recommendations</div>
+        <div class="card-body">
+          <textarea name="recommendations" class="form-control font-monospace" rows="4"
+                    placeholder="Recommended actions for the audience…">{{ tlr.recommendations if tlr else '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-binoculars me-2"></i>Outlook</div>
+        <div class="card-body">
+          <textarea name="outlook" class="form-control font-monospace" rows="4"
+                    placeholder="Near-term threat outlook and anticipated developments…">{{ tlr.outlook if tlr else '' }}</textarea>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right: save + queued sources -->
+    <div class="col-lg-4">
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-save me-2"></i>Save</div>
+        <div class="card-body">
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="fas fa-save me-1"></i> {{ 'Update report' if is_edit else 'Create report' }}
+          </button>
+        </div>
+      </div>
+
+      {% if queued %}
+      <div class="card content-card mb-4">
+        <div class="card-header"><i class="fas fa-robot me-2"></i>Draft with AI</div>
+        <div class="card-body">
+          <button type="button" class="btn btn-outline-info w-100" id="tlr-draft-btn">
+            <i class="fas fa-wand-magic-sparkles me-1"></i> Draft sections from the queue
+          </button>
+          <div class="form-text">
+            Reads the {{ queued | length }} queued event{{ '' if queued | length == 1 else 's' }} and fills the
+            sections that are still empty. Trends are counted from the events; the analyst writes what they mean
+            for the organisation, marked <code>[ANALYST]</code>.
+          </div>
+          <div id="tlr-draft-status" class="form-text"></div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if not is_edit and queued %}
+      <div class="card content-card mb-4">
+        <div class="card-header">
+          <i class="fas fa-map me-2"></i>Source queue
+          <span class="badge text-bg-secondary ms-1">{{ queued | length }}</span>
+        </div>
+        <div class="card-body p-0">
+          <div style="max-height:400px;overflow-y:auto;">
+            <ul class="list-group list-group-flush">
+              {% for ev in queued %}
+              <li class="list-group-item px-3 py-2">
+                <div class="small fw-semibold text-truncate">{{ ev.info or '(untitled)' }}</div>
+                <div class="text-muted" style="font-size:.7rem;">{{ ev.date or '' }}{% if ev.source_label %} · {{ ev.source_label }}{% endif %}</div>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+        <div class="card-footer text-muted" style="font-size:.75rem;">
+          Events tagged <code>zsazsa:product="threat-landscape-report"</code> in the collection view.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// "Draft sections from the queue": drafts the report from the queued collection
+// events and fills the sections the analyst has not written yet.
+(function() {
+  var btn = document.getElementById('tlr-draft-btn');
+  var status = document.getElementById('tlr-draft-status');
+  if (!btn) return;
+  var sections = {
+    top_threats: 'Top threats',
+    trending_actors: 'Trending actors',
+    key_incidents: 'Key incidents',
+    recommendations: 'Recommendations',
+    outlook: 'Outlook',
+  };
+
+  // Mark a drafted section so the analyst can see what to review; the mark
+  // clears as soon as they edit it themselves.
+  function markDrafted(el) {
+    el.classList.add('border-info', 'border-2');
+    el.addEventListener('input', function() {
+      el.classList.remove('border-info', 'border-2');
+    }, {once: true});
+  }
+
+  btn.addEventListener('click', function() {
+    btn.disabled = true;
+    status.textContent = 'Reading the queue and drafting…';
+    var body = new FormData();
+    body.append('reporting_period', document.querySelector('[name="reporting_period"]').value.trim());
+
+    fetch('{{ url_for("threat_landscape.draft_trends") }}', {
+      method: 'POST',
+      headers: {'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content},
+      body: body,
+    })
+    .then(zsazsaReadJson)
+    .then(function(data) {
+      if (data.error) { status.textContent = data.error; return; }
+      var drafted = [];
+      Object.keys(sections).forEach(function(name) {
+        var el = document.querySelector('[name="' + name + '"]');
+        if (!el || el.value.trim() || !data.sections[name]) return;
+        el.value = data.sections[name];
+        // Isolated signals belong with the outlook, but only when we wrote it.
+        if (name === 'outlook' && data.sections.isolated_signals) {
+          el.value += '\n\nIsolated signals worth watching:\n' + data.sections.isolated_signals;
+        }
+        markDrafted(el);
+        drafted.push(sections[name]);
+      });
+      status.textContent = drafted.length
+        ? 'Drafted and highlighted: ' + drafted.join(', ') + ', from ' + data.event_count + ' queued events. Review before saving.'
+        : 'Nothing to draft: every section already has content.';
+    })
+    .catch(function(err) { status.textContent = 'Drafting did not complete: ' + zsazsaErrorText(err); })
+    .finally(function() { btn.disabled = false; });
+  });
+})();
+</script>
+{% endblock %}

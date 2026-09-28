@@ -1,0 +1,714 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline | zsazsa CTI{% endblock %}
+{% block page_title %}Pipeline{% endblock %}
+
+{% block content %}
+
+<div class="row g-4">
+
+  <div class="col-lg-8">
+
+    {% if configured_source_volume %}
+    <div class="card content-card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-server me-2"></i>By configured source</span>
+        <a href="{{ url_for('collection_sources.index') }}" class="btn btn-xs btn-outline-secondary">
+          <i class="fas fa-sliders me-1"></i> Collection sources
+        </a>
+      </div>
+      <div class="card-body p-0">
+        <p class="text-muted small px-3 pt-3 mb-2">
+          Events held in the collection cache per source configured under Collection sources,
+          against everything matching that source's filter on its server. A large gap means the
+          source's limit or date window is cutting the refresh short.
+        </p>
+        {% set max_cached = configured_source_volume | map(attribute='cached') | max %}
+        <ul class="list-unstyled mb-0">
+          {% for row in configured_source_volume %}
+          <li class="px-3 py-2 border-top">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="fw-semibold" style="font-size:.875rem;">{{ row.label }}</span>
+              <span class="text-muted small">
+                {{ row.cached }}{% if row.on_server is not none %} / {{ row.on_server }}{% endif %}
+              </span>
+            </div>
+            <div class="progress" style="height:4px;border-radius:2px;">
+              <div class="progress-bar"
+                   style="width:{{ (row.cached / max_cached * 100) | int if max_cached else 0 }}%;background:var(--accent-blue);"></div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if pipeline %}
+
+    <div class="card content-card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-satellite-dish me-2"></i>Pipeline throughput</span>
+        <form method="post" action="{{ url_for('pipeline.purge_orphaned') }}" class="m-0"
+              onsubmit="return confirm('Drop analyser log entries whose source MISP event no longer exists?');">
+          <button type="submit" class="btn btn-xs btn-outline-secondary" title="Reconcile log with current MISP state">
+            <i class="fas fa-broom me-1"></i> Purge orphaned
+          </button>
+        </form>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Figures below cover the analyser's local history. Counts may include events that have
+          since been rotated out of the scraper MISP. Use <em>Purge orphaned</em> to drop entries
+          whose source events no longer exist.
+        </p>
+        <div class="row g-3 mb-3">
+          <div class="col-4 text-center">
+            <div style="font-size:1.6rem;font-weight:700;color:var(--text-primary);">{{ pipeline.total }}</div>
+            <div class="text-muted small">Total events logged</div>
+          </div>
+          <div class="col-4 text-center">
+            <div style="font-size:1.6rem;font-weight:700;color:var(--text-primary);">{{ pipeline.last_7d }}</div>
+            <div class="text-muted small">Last 7 days</div>
+          </div>
+          <div class="col-4 text-center">
+            <div style="font-size:1.6rem;font-weight:700;color:var(--text-primary);">{{ pipeline.last_30d }}</div>
+            <div class="text-muted small">Last 30 days</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+
+      <div class="col-md-6">
+        <div class="card content-card h-100">
+          <div class="card-header"><i class="fas fa-rss me-2"></i>By collection source</div>
+          <div class="card-body p-0">
+            {% if pipeline.by_source %}
+            {% set max_n = pipeline.by_source[0].n %}
+            <ul class="list-unstyled mb-0">
+              {% for row in pipeline.by_source %}
+              <li class="px-3 py-2 border-bottom{{ ' source-extra d-none' if loop.index > 8 }}">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-semibold" style="font-size:.875rem;">{{ row.source_feed or 'Unknown' }}</span>
+                  <span class="text-muted small">{{ row.n }}</span>
+                </div>
+                <div class="progress" style="height:4px;border-radius:2px;">
+                  <div class="progress-bar" style="width:{{ (row.n / max_n * 100) | int }}%;background:var(--accent-blue);"></div>
+                </div>
+              </li>
+              {% endfor %}
+            </ul>
+            {% if pipeline.by_source | length > 8 %}
+            <div class="px-3 py-2 border-top">
+              <button type="button" class="btn btn-xs btn-link p-0" id="toggle-sources"
+                      data-total="{{ pipeline.by_source | length }}">
+                Show all {{ pipeline.by_source | length }} sources
+              </button>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="empty-state py-4"><p class="text-muted small mb-0">No data.</p></div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card content-card h-100">
+          <div class="card-header"><i class="fas fa-circle-check me-2"></i>By outcome</div>
+          <div class="card-body p-0">
+            {% if pipeline.by_outcome %}
+            <ul class="list-unstyled mb-0">
+              {% for row in pipeline.by_outcome %}
+              {% set color = 'var(--accent-green)' if row.outcome in ('matched', 'processed', 'success', 'product_created') else 'var(--accent-red)' if 'error' in (row.outcome or '') else 'var(--accent-orange)' %}
+              <li class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
+                <span class="d-flex align-items-center gap-2">
+                  <span style="width:8px;height:8px;border-radius:50%;background:{{ color }};display:inline-block;flex-shrink:0;"></span>
+                  <span style="font-size:.875rem;">{{ row.outcome or 'Unknown' }}</span>
+                </span>
+                <span class="badge rounded-pill" style="background:color-mix(in srgb,{{ color }} 12%,transparent);color:{{ color }};font-size:.72rem;">{{ row.n }}</span>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <div class="empty-state py-4"><p class="text-muted small mb-0">No data.</p></div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card content-card mb-4">
+      <div class="card-header"><i class="fas fa-play-circle me-2"></i>Analyser run history</div>
+      <div class="card-body p-0">
+        {% if recent_runs %}
+        <div style="overflow-x:auto;">
+          <table class="table table-sm zsazsa-table mb-0" style="font-size:.82rem;">
+            <thead>
+              <tr>
+                <th style="white-space:nowrap;">Started</th>
+                <th>Action</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for run in recent_runs %}
+              {# "success" is what older runs recorded; everything writes
+                 "completed" now, but the old rows are still in the log. #}
+              {% set is_ok = run.status in ('completed', 'success') %}
+              {% set is_fail = run.status == 'failed' %}
+              {% set decisions = run.result.event_decisions if run.result and run.result.event_decisions else [] %}
+              <tr {% if decisions %}style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#run-decisions-{{ loop.index }}" aria-expanded="false"{% endif %}>
+                <td class="text-muted" style="white-space:nowrap;">{{ run.started_at[:16] if run.started_at else '-' }}</td>
+                <td>
+                  {% if run.action == 'daily-briefing' %}Daily briefing
+                  {% elif run.action == 'flash-intel' %}Flash intel
+                  {% elif run.action == 'vea' %}VEA
+                  {% elif run.action == 'analyser' %}CLI analyser
+                  {% elif run.action == 'imap-collector' %}Mailbox poll
+                  {% elif run.action == 'bulk-summarise' %}AI summaries
+                  {% else %}{{ run.action }}{% endif %}
+                  {% if run.triggered_by and run.triggered_by != 'dashboard' %}
+                  <span class="text-muted ms-1">({{ run.triggered_by }})</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge {% if is_ok %}outcome-success{% elif is_fail %}outcome-error{% else %}outcome-warning{% endif %}" style="font-size:.68rem;"
+                        {% if run.interrupted %}title="Started but never finished. The process running it stopped before it could record an outcome."{% endif %}>
+                    {{ 'interrupted' if run.interrupted else run.status }}
+                  </span>
+                </td>
+                <td class="text-muted" style="white-space:nowrap;">
+                  {% if run.duration %}{{ run.duration }}
+                  {% elif run.interrupted %}-
+                  {% elif run.status == 'running' %}running…
+                  {% else %}-{% endif %}
+                </td>
+                <td class="text-muted">
+                  {% if run.result %}
+                    {% if run.result.message %}{{ run.result.message }}
+                    {% elif run.result.total_events is defined %}
+                      {{ run.result.total_events }} events · {{ run.result.product_created }} products · {{ run.result.not_relevant }} skipped
+                      {% if run.result.feed_caches_refreshed %} · {{ run.result.feed_caches_refreshed }} feed cache(s){% endif %}
+                    {% endif %}
+                    {% if decisions %}<span class="text-muted ms-1" style="font-size:.72rem;"><i class="fas fa-chevron-down"></i></span>{% endif %}
+                  {% else %}-{% endif %}
+                </td>
+              </tr>
+              {% if decisions %}
+              <tr class="collapse" id="run-decisions-{{ loop.index }}">
+                <td colspan="5" class="px-3 py-2" style="background:var(--surface-muted);">
+                  <table class="table table-sm mb-0" style="font-size:.78rem;">
+                    <thead class="table-light">
+                      <tr><th style="width:45%">Event</th><th style="width:12%">Decision</th><th>Reason</th></tr>
+                    </thead>
+                    <tbody>
+                      {% for d in decisions %}
+                      {% set outcome_fg = 'var(--outcome-success-fg)' if d.outcome == 'included' else 'var(--outcome-error-fg)' if d.outcome == 'rejected' else 'var(--outcome-warning-fg)' %}
+                      <tr>
+                        <td class="text-muted" style="word-break:break-word;">{{ d.title or d.uuid or '-' }}</td>
+                        <td style="color:{{ outcome_fg }};font-weight:600;">{{ d.outcome }}</td>
+                        <td class="text-muted">{{ d.reason or '' }}</td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="empty-state py-4"><p class="text-muted mb-0">No analyser runs recorded yet.</p></div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Activity can run to thousands of entries a day, so the card filters and
+       pages server side instead of showing a fixed slice of the newest rows.
+       The table keeps its own scrollbar so the page length never changes. #}
+    <div class="card content-card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="fas fa-clock-rotate-left me-2"></i>Pipeline activity</span>
+        <span class="text-muted small" id="activity-count">&hellip;</span>
+      </div>
+      <div class="card-body p-2 border-bottom">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <input type="text" id="activity-q" class="form-control form-control-sm" placeholder="Search title or UUID…"
+                 style="max-width:220px;font-size:.8rem;" autocomplete="off">
+          <select id="activity-period" class="form-select form-select-sm" style="max-width:140px;font-size:.8rem;">
+            <option value="">Any time</option>
+            <option value="today">Today</option>
+            <option value="48h">Last 48h</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+          </select>
+          <select id="activity-source" class="form-select form-select-sm" style="max-width:180px;font-size:.8rem;">
+            <option value="">All sources</option>
+            {% for row in pipeline.by_source %}
+            <option value="{{ row.source_feed }}">{{ row.source_feed or 'Unknown' }}</option>
+            {% endfor %}
+          </select>
+          <select id="activity-outcome" class="form-select form-select-sm" style="max-width:170px;font-size:.8rem;">
+            <option value="">All outcomes</option>
+            {% for row in pipeline.by_outcome %}
+            <option value="{{ row.outcome }}">{{ row.outcome or 'Unknown' }}</option>
+            {% endfor %}
+          </select>
+          <button type="button" class="btn btn-sm btn-outline-danger" id="activity-problems"
+                  title="Show only entries that failed: any error outcome, plus no_content">
+            <i class="fas fa-triangle-exclamation me-1"></i>Problems only
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="activity-orphaned"
+                  title="Also list orphaned entries, whose source event no longer exists in MISP">
+            <i class="fas fa-link-slash me-1"></i>Include orphaned
+          </button>
+          <button type="button" class="btn btn-xs btn-link text-muted ms-auto" id="activity-reset"
+                  style="font-size:.78rem;"><i class="fas fa-xmark me-1"></i>Reset</button>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div style="overflow:auto;max-height:26rem;">
+          <table class="table table-sm zsazsa-table mb-0" style="font-size:.82rem;">
+            <thead style="position:sticky;top:0;z-index:1;background:var(--card-bg);">
+              <tr>
+                <th style="white-space:nowrap;">Timestamp</th>
+                <th>Source</th>
+                <th>Event</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody id="activity-tbody">
+              <tr><td colspan="4" class="text-center text-muted py-4">
+                <i class="fas fa-circle-notch fa-spin me-1"></i>Loading activity…
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-footer d-flex justify-content-center py-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="activity-more">
+          <i class="fas fa-angles-down me-1"></i>Load more
+        </button>
+      </div>
+    </div>
+
+    {% else %}
+    <div class="card content-card">
+      <div class="card-body">
+        <div class="empty-state py-4">
+          <i class="fas fa-database text-muted d-block mb-2 fa-2x"></i>
+          <p class="text-muted mb-0">Analyser database not found. Run the pipeline at least once to see statistics here.</p>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <div class="col-lg-4">
+
+    <div class="card content-card mb-4">
+      <div class="card-header"><i class="fas fa-plug me-2"></i>MISP connectivity</div>
+      <div class="card-body p-0">
+        <ul class="list-unstyled mb-0">
+          {% for label, conn in [('Scraper / analyser', scraper_misp), ('Webapp store', webapp_misp)] %}
+          {% set configured = conn.get('configured', True) %}
+          <li class="px-3 py-2 {% if not loop.last %}border-bottom{% endif %}">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="fw-semibold" style="font-size:.875rem;">{{ label }}</span>
+              {% if conn.ok %}
+              <span class="badge outcome-success" style="font-size:.7rem;">
+                <i class="fas fa-circle-check me-1"></i>Connected
+              </span>
+              {% elif not configured %}
+              <span class="badge source-disabled" style="font-size:.7rem;">
+                <i class="fas fa-circle-pause me-1"></i>Not configured
+              </span>
+              {% else %}
+              <span class="badge outcome-error" style="font-size:.7rem;">
+                <i class="fas fa-circle-xmark me-1"></i>Unreachable
+              </span>
+              {% endif %}
+            </div>
+            <div class="text-muted" style="font-size:.78rem;font-family:monospace;word-break:break-all;">
+              {{ conn.url }}
+            </div>
+            {% if conn.ok %}
+            <div class="text-muted small mt-1">v{{ conn.version }}</div>
+            {% else %}
+            <div class="{{ 'text-muted' if not configured else 'text-danger' }} small mt-1">{{ conn.error }}</div>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    {% if source_health %}
+    <div class="card content-card mb-4">
+      <div class="card-header d-flex align-items-center justify-content-between">
+        <span><i class="fas fa-rss me-2"></i>Collection source health</span>
+        <span class="text-muted fw-normal" style="font-size:.72rem;"
+              title="The background worker re-reads every source on this interval">
+          <i class="fas fa-rotate me-1"></i>refresh every {{ cache_interval_min }} min
+        </span>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-unstyled mb-0">
+          {% for src in source_health %}
+          <li class="px-3 py-2 {% if not loop.last %}border-bottom{% endif %}">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="fw-semibold" style="font-size:.875rem;">{{ src.label }}</span>
+              <span class="d-flex gap-1">
+                {% if src.refresh_overdue %}
+                <span class="badge outcome-warning" style="font-size:.7rem;"
+                      title="No refresh for more than twice the interval">
+                  <i class="fas fa-hourglass-half me-1"></i>Refresh overdue
+                </span>
+                {% endif %}
+                {% if src.manual %}
+                <span class="badge outcome-info" style="font-size:.7rem;">
+                  <i class="fas fa-hand me-1"></i>Manual
+                </span>
+                {% elif src.ok %}
+                <span class="badge outcome-success" style="font-size:.7rem;">
+                  <i class="fas fa-circle-check me-1"></i>Online
+                </span>
+                {% else %}
+                <span class="badge outcome-error" style="font-size:.7rem;">
+                  <i class="fas fa-circle-xmark me-1"></i>Unreachable
+                </span>
+                {% endif %}
+              </span>
+            </div>
+            {% if src.manual %}
+            <div style="font-size:.78rem;color:var(--text-muted);">Human-curated source, no automated connectivity check.</div>
+            {% elif src.ok %}
+            <div class="d-flex gap-3" style="font-size:.78rem;color:var(--text-muted);">
+              {% if src.last_event_date %}
+              <span><i class="fas fa-calendar-day me-1"></i>Last event: {{ src.last_event_date }}</span>
+              {% endif %}
+              {% if src.event_count is not none %}
+              <span><i class="fas fa-layer-group me-1"></i>{{ src.event_count }} on server</span>
+              {% endif %}
+            </div>
+            {% else %}
+            <div class="text-danger" style="font-size:.78rem;">{{ src.error }}</div>
+            {% endif %}
+
+            {# Local refresh: what the collection cache worker last read from this
+               source. A refresh re-reads the whole set the source's filters match,
+               so the count is that set's size and "new" is what it added. #}
+            <div class="d-flex gap-3 flex-wrap" style="font-size:.78rem;color:var(--text-muted);">
+              {% if not src.last_refresh %}
+              <span><i class="fas fa-inbox me-1"></i>Never refreshed</span>
+              {% else %}
+              <span title="Last refresh: {{ src.last_refresh }}">
+                <i class="fas fa-clock me-1"></i>Refreshed {{ src.refresh_age }}
+              </span>
+              {% if src.refresh_error %}
+              <span class="text-danger"><i class="fas fa-triangle-exclamation me-1"></i>{{ src.refresh_error }}</span>
+              {% elif src.matched is not none %}
+              <span title="Every refresh re-reads all events matching this source's filters, so this is the size of that set, not what arrived since the last run">
+                <i class="fas fa-download me-1"></i>{{ src.matched }} event{{ 's' if src.matched != 1 }} matched
+              </span>
+              {% if src.matched_new is not none %}
+              <span title="Events this refresh added that were not cached before">
+                {% if src.matched_new %}<span class="text-success">{{ src.matched_new }} new</span>{% else %}no new events{% endif %}
+              </span>
+              {% endif %}
+              {% if src.refresh_duration is not none %}
+              <span><i class="fas fa-stopwatch me-1"></i>{{ src.refresh_duration }}s</span>
+              {% endif %}
+              {% endif %}
+              {# Only worth showing when the cache holds something other than what
+                 the last run read, which is what a failed run leaves behind. #}
+              {% if src.cached_events != src.matched %}
+              <span title="Events currently held in the local collection cache">
+                <i class="fas fa-database me-1"></i>{{ src.cached_events }} cached
+              </span>
+              {% endif %}
+              {% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if imap_mailboxes %}
+    <div class="card content-card mb-4">
+      <div class="card-header"><i class="fas fa-envelope-open-text me-2"></i>IMAP mailboxes</div>
+      <div class="card-body p-0">
+        <ul class="list-unstyled mb-0">
+          {% for mb in imap_mailboxes %}
+          <li class="px-3 py-2 {% if not loop.last %}border-bottom{% endif %}">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="fw-semibold" style="font-size:.875rem;">
+                {{ mb.name }}
+                <span class="text-muted ms-1" style="font-size:.72rem;">{{ mb.source_count }} source{{ 's' if mb.source_count != 1 }}</span>
+              </span>
+              {% if not mb.enabled %}
+              <span class="badge outcome-info" style="font-size:.7rem;"><i class="fas fa-circle-pause me-1"></i>Disabled</span>
+              {% elif mb.status == 'ok' %}
+              <span class="badge outcome-success" style="font-size:.7rem;"><i class="fas fa-circle-check me-1"></i>OK</span>
+              {% elif mb.status == 'failed' %}
+              <span class="badge outcome-error" style="font-size:.7rem;"><i class="fas fa-circle-xmark me-1"></i>Failed</span>
+              {% elif mb.status == 'skipped' %}
+              <span class="badge outcome-warning" style="font-size:.7rem;"><i class="fas fa-forward me-1"></i>Skipped</span>
+              {% else %}
+              <span class="badge outcome-info" style="font-size:.7rem;">Not yet polled</span>
+              {% endif %}
+            </div>
+            <div class="d-flex gap-3" style="font-size:.78rem;color:var(--text-muted);">
+              {% if mb.last_polled %}
+              <span><i class="fas fa-clock me-1"></i>Last polled: {{ mb.last_polled[:16] }}</span>
+              {% else %}
+              <span><i class="fas fa-clock me-1"></i>Never polled</span>
+              {% endif %}
+              {% if mb.message %}<span><i class="fas fa-circle-info me-1"></i>{{ mb.message }}</span>{% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if newsletter_sources %}
+    <div class="card content-card mb-4">
+      <div class="card-header"><i class="fas fa-envelope-open-text me-2"></i>Email sources</div>
+      <div class="card-body p-0">
+        <ul class="list-unstyled mb-0">
+          {% for ns in newsletter_sources %}
+          <li class="px-3 py-2 d-flex align-items-center justify-content-between {% if not loop.last %}border-bottom{% endif %}">
+            <span style="font-size:.85rem;">
+              <span class="fw-semibold {% if not ns.enabled %}text-muted{% endif %}">{{ ns.label }}</span>
+              <span class="text-muted ms-1" style="font-size:.72rem;">{{ ns.mailbox }}</span>
+              {% if ns.reliability %}<span class="badge text-bg-light font-monospace ms-1">{{ ns.reliability }}</span>{% endif %}
+            </span>
+            <span class="text-muted" style="font-size:.8rem;">{{ ns.event_count }} event{{ 's' if ns.event_count != 1 }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="card-footer text-muted" style="font-size:.72rem;">
+        Live counts of events currently carrying each source's data-collection-source tag.
+      </div>
+    </div>
+    {% endif %}
+
+    {% if indicator_stats %}
+    <div class="card content-card">
+      <div class="card-header"><i class="fas fa-fingerprint me-2"></i>Indicator health</div>
+      <div class="card-body">
+        {% if indicator_stats.ok %}
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted small">IoC-type attributes</span>
+          <span class="fw-semibold">{{ indicator_stats.total_ioc }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-3">
+          <span class="text-muted small">All attributes</span>
+          <span class="fw-semibold">{{ indicator_stats.all_total }}</span>
+        </div>
+        {% if indicator_stats.by_type %}
+        <div style="font-size:.78rem;">
+          {% for itype, n in indicator_stats.by_type.items() %}
+          <div class="d-flex justify-content-between border-bottom py-1">
+            <span class="text-muted font-monospace">{{ itype }}</span>
+            <span class="fw-semibold">{{ n }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% else %}
+        <p class="text-muted small mb-0">Could not retrieve attribute statistics from MISP.</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var btn = document.getElementById('toggle-sources');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var extra = document.querySelectorAll('.source-extra');
+    if (!extra.length) return;
+    var hidden = extra[0].classList.contains('d-none');
+    extra.forEach(function (el) { el.classList.toggle('d-none', !hidden); });
+    btn.textContent = hidden ? 'Show fewer sources' : 'Show all ' + btn.dataset.total + ' sources';
+  });
+})();
+
+/* Pipeline activity: filter and page over event_log without leaving the page. */
+(function () {
+  var tbody = document.getElementById('activity-tbody');
+  if (!tbody) return;
+
+  var countEl = document.getElementById('activity-count');
+  var moreBtn = document.getElementById('activity-more');
+  var qEl = document.getElementById('activity-q');
+  var periodEl = document.getElementById('activity-period');
+  var sourceEl = document.getElementById('activity-source');
+  var outcomeEl = document.getElementById('activity-outcome');
+  var problemsBtn = document.getElementById('activity-problems');
+  var orphanedBtn = document.getElementById('activity-orphaned');
+  var resetBtn = document.getElementById('activity-reset');
+
+  var offset = 0;
+  var shown = 0;
+  var problemsOnly = false;
+  var includeOrphaned = false;
+  var hiddenOrphaned = 0;
+  var searchTimer = null;
+  /* Filters can change while a page is still in flight; only the newest
+     request is allowed to write to the table. */
+  var currentRequest = 0;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function filtersActive() {
+    return !!(qEl.value.trim() || periodEl.value || sourceEl.value || outcomeEl.value || problemsOnly);
+  }
+
+  function params() {
+    var p = new URLSearchParams();
+    if (qEl.value.trim()) p.set('q', qEl.value.trim());
+    if (periodEl.value) p.set('period', periodEl.value);
+    if (sourceEl.value) p.set('source', sourceEl.value);
+    if (outcomeEl.value) p.set('outcome', outcomeEl.value);
+    if (problemsOnly) p.set('problems', '1');
+    if (includeOrphaned) p.set('include_orphaned', '1');
+    /* No limit: the endpoint owns the page size and echoes it back. */
+    p.set('offset', String(offset));
+    return p;
+  }
+
+  function rowHtml(row) {
+    var outcome = row.outcome || '';
+    var cls = 'outcome-warning';
+    if (['matched', 'processed', 'success', 'product_created'].indexOf(outcome) !== -1) cls = 'outcome-success';
+    else if (outcome.indexOf('error') !== -1) cls = 'outcome-error';
+    var title = row.event_info || '';
+    var shortTitle = title.length > 55 ? title.slice(0, 55) + '…' : title;
+    return '<tr>'
+      + '<td class="text-muted" style="white-space:nowrap;">' + esc((row.processed_at || '-').slice(0, 16)) + '</td>'
+      + '<td><span class="source-tag">' + esc(row.source_feed || '-') + '</span></td>'
+      + '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(title) + '">'
+      + '<span class="text-muted" style="font-family:monospace;font-size:.72rem;">' + esc((row.event_uuid || '').slice(0, 8)) + '…</span>'
+      + (title ? '<span class="ms-1">' + esc(shortTitle) + '</span>' : '')
+      + '</td>'
+      + '<td style="white-space:nowrap;">'
+      + (outcome
+          ? '<span class="badge ' + cls + '" style="font-size:.68rem;">' + esc(outcome) + '</span>'
+            + (row.detail ? '<span class="text-muted ms-1" title="' + esc(row.detail) + '"><i class="fas fa-circle-info fa-xs"></i></span>' : '')
+          : '-')
+      + '</td></tr>';
+  }
+
+  function load(append) {
+    if (!append) {
+      offset = 0;
+      shown = 0;
+      hiddenOrphaned = 0;
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">'
+        + '<i class="fas fa-circle-notch fa-spin me-1"></i>Loading activity…</td></tr>';
+    }
+    moreBtn.disabled = true;
+    currentRequest += 1;
+    var request = currentRequest;
+
+    fetch(SCRIPT_ROOT + '/pipeline/activity?' + params().toString())
+      .then(zsazsaReadJson)
+      .then(function (data) {
+        if (request !== currentRequest) return;
+        if (!data.ok) throw new Error(data.error || 'the server could not read the activity log.');
+        if (!append) tbody.innerHTML = '';
+        var rows = data.rows;
+        tbody.insertAdjacentHTML('beforeend', rows.map(rowHtml).join(''));
+        shown += rows.length;
+        hiddenOrphaned += data.hidden_orphaned;
+        offset = data.offset + data.limit;
+        if (!shown) {
+          var empty = (data.total === 0 && !filtersActive())
+            ? 'No pipeline activity recorded yet.'
+            : 'No entries match these filters.';
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">' + empty + '</td></tr>';
+        }
+        countEl.textContent = 'showing ' + shown + ' of ' + data.total + ' entries'
+          + (hiddenOrphaned ? ' · ' + hiddenOrphaned + ' orphaned hidden' : '');
+        moreBtn.classList.toggle('d-none', !data.has_more);
+        moreBtn.disabled = false;
+      })
+      .catch(function (err) {
+        if (request !== currentRequest) return;
+        var message = 'Could not load activity: ' + zsazsaErrorText(err);
+        if (append) {
+          /* Keep the pages already loaded; only report that this one failed. */
+          countEl.textContent = message;
+          moreBtn.disabled = false;
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-danger small py-3 px-3">' + esc(message) + '</td></tr>';
+          countEl.textContent = '';
+          moreBtn.classList.add('d-none');
+        }
+      });
+  }
+
+  [periodEl, sourceEl, outcomeEl].forEach(function (el) {
+    el.addEventListener('change', function () { load(false); });
+  });
+  qEl.addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () { load(false); }, 300);
+  });
+  problemsBtn.addEventListener('click', function () {
+    problemsOnly = !problemsOnly;
+    problemsBtn.classList.toggle('btn-danger', problemsOnly);
+    problemsBtn.classList.toggle('btn-outline-danger', !problemsOnly);
+    load(false);
+  });
+  orphanedBtn.addEventListener('click', function () {
+    includeOrphaned = !includeOrphaned;
+    orphanedBtn.classList.toggle('btn-secondary', includeOrphaned);
+    orphanedBtn.classList.toggle('btn-outline-secondary', !includeOrphaned);
+    load(false);
+  });
+  resetBtn.addEventListener('click', function () {
+    qEl.value = '';
+    periodEl.value = '';
+    sourceEl.value = '';
+    outcomeEl.value = '';
+    problemsOnly = false;
+    problemsBtn.classList.remove('btn-danger');
+    problemsBtn.classList.add('btn-outline-danger');
+    includeOrphaned = false;
+    orphanedBtn.classList.remove('btn-secondary');
+    orphanedBtn.classList.add('btn-outline-secondary');
+    load(false);
+  });
+  moreBtn.addEventListener('click', function () { load(true); });
+
+  load(false);
+})();
+</script>
+{% endblock %}

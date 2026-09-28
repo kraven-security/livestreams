@@ -1,0 +1,333 @@
+{% extends "base.html" %}
+{% from "_sort.html" import sort_th %}
+
+{% block title %}PIRs | zsazsa CTI{% endblock %}
+{% block page_title %}Priority Intelligence Requirements{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('requirements.pir_new') }}" class="btn btn-sm btn-primary">
+  <i class="fas fa-plus me-1"></i> New PIR
+</a>
+<a href="{{ url_for('export.pirs') }}" class="btn btn-sm btn-outline-secondary ms-2" title="Export as Markdown">
+  <i class="fas fa-download me-1"></i> Export
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card content-card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label small mb-1">Intelligence level</label>
+        <select name="intel_level" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">All levels</option>
+          {% for lvl in intel_levels %}
+          <option value="{{ lvl }}" {{ 'selected' if intel_filter == lvl }}>{{ lvl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if intel_filter %}
+      <div class="col-auto">
+        <a href="{{ url_for('requirements.pir_list') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+      </div>
+      {% endif %}
+      <div class="col-auto ms-auto text-muted small">{{ pirs | length }} PIR{{ 's' if pirs|length != 1 }}</div>
+    </form>
+  </div>
+</div>
+
+<!-- Kanban board -->
+{% set kanban_statuses = ['Pending', 'Active', 'In Development', 'Under Evaluation', 'Implemented', 'Retired'] %}
+{% set rd_intakes = ['rejected'] %}
+<div class="card content-card mb-3">
+  <div class="card-header"><i class="fas fa-columns me-2"></i>Status board (drag to update status)</div>
+  <div class="card-body p-2">
+    <div class="kanban-board d-flex gap-2 overflow-auto pb-1">
+      {% for col_status in kanban_statuses %}
+      <div class="kanban-col flex-shrink-0" data-status="{{ col_status }}" style="min-width:160px;width:160px;">
+        <div class="kanban-col-header text-center fw-semibold small p-1 mb-1 rounded
+          {% if col_status == 'Active' %}bg-success-subtle text-success-emphasis
+          {% elif col_status == 'Pending' %}bg-secondary-subtle text-secondary-emphasis
+          {% elif col_status == 'In Development' %}bg-primary-subtle text-primary-emphasis
+          {% elif col_status == 'Under Evaluation' %}bg-warning-subtle text-warning-emphasis
+          {% elif col_status == 'Implemented' %}bg-info-subtle text-info-emphasis
+          {% else %}bg-light text-muted{% endif %}">
+          {{ col_status }}
+          <span class="badge bg-white text-dark ms-1" style="font-size:.65rem">
+            {%- if col_status == 'Pending' -%}
+              {{ pirs | selectattr('status', 'equalto', col_status) | rejectattr('intake_status', 'in', rd_intakes) | list | length }}
+            {%- else -%}
+              {{ pirs | selectattr('status', 'equalto', col_status) | list | length }}
+            {%- endif -%}
+          </span>
+        </div>
+        <div class="kanban-cards" style="min-height:60px;">
+          {% for pir in pirs %}
+          {% if pir.status == col_status %}
+          {% if col_status != 'Pending' or pir.intake_status not in rd_intakes %}
+          {% set can_drag = col_status != 'Pending' %}
+          <div class="kanban-card card mb-1 p-1 shadow-sm"
+               draggable="{{ 'true' if can_drag else 'false' }}"
+               data-id="{{ pir.id }}"
+               data-intake-status="{{ pir.intake_status }}"
+               data-update-url="{{ url_for('requirements.pir_status_update', id=pir.id) }}"
+               style="{{ 'cursor:grab' if can_drag else 'cursor:default' }};font-size:.75rem;">
+            <div class="fw-semibold d-flex justify-content-between align-items-center">
+              <a href="{{ url_for('requirements.pir_detail', id=pir.id) }}" class="text-decoration-none">{{ pir.pir_id }}</a>
+              {% if pir.intake_status == 'submitted' %}<i class="fas fa-inbox fa-xs" style="color:var(--accent-orange);" title="Triage: submitted"></i>
+              {% elif pir.intake_status == 'acknowledged' %}<i class="fas fa-eye fa-xs" style="color:var(--accent-blue);" title="Triage: acknowledged"></i>
+              {% elif pir.intake_status == 'triaged' %}<i class="fas fa-clipboard-check fa-xs" style="color:var(--accent-cyan);" title="Triage: triaged"></i>
+              {% elif pir.intake_status == 'approved' %}<i class="fas fa-check-circle fa-xs" style="color:var(--status-active-fg);" title="Triage: approved"></i>
+              {% elif pir.intake_status == 'deferred' %}<i class="fas fa-pause-circle fa-xs" style="color:var(--neutral-600);" title="Triage: deferred"></i>
+              {% elif pir.intake_status == 'merged' %}<i class="fas fa-code-branch fa-xs" style="color:var(--neutral-600);" title="Triage: merged"></i>
+              {% endif %}
+            </div>
+            <div class="text-muted" style="font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ pir.question }}">{{ pir.question | truncate(30) }}</div>
+            {% if pir.intake_status == 'deferred' %}
+            <div class="mt-1">
+              <span class="badge" style="font-size:.6rem;background:var(--neutral-600);color:var(--text-on-accent);">deferred</span>
+            </div>
+            {% endif %}
+            {% if not can_drag %}
+            <div class="mt-1">
+              <span class="badge" style="font-size:.6rem;background:var(--accent-orange);color:var(--text-on-accent);" title="Triage from the table below before moving">
+                <i class="fas fa-gavel me-1"></i>Triage in list
+              </span>
+            </div>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+
+      <!-- Rejected column -->
+      <div class="kanban-col flex-shrink-0" style="min-width:160px;width:160px;">
+        <div class="kanban-col-header text-center fw-semibold small p-1 mb-1 rounded bg-danger-subtle text-danger-emphasis">
+          Rejected
+          <span class="badge bg-white text-dark ms-1" style="font-size:.65rem">{{ pirs | selectattr('intake_status', 'equalto', 'rejected') | list | length }}</span>
+        </div>
+        <div class="kanban-cards" style="min-height:60px;">
+          {% for pir in pirs %}
+          {% if pir.intake_status == 'rejected' %}
+          <div class="kanban-card card mb-1 p-1 shadow-sm" draggable="false"
+               data-id="{{ pir.id }}" style="cursor:default;font-size:.75rem;opacity:.75;">
+            <div class="fw-semibold d-flex justify-content-between align-items-center">
+              <a href="{{ url_for('requirements.pir_detail', id=pir.id) }}" class="text-decoration-none">{{ pir.pir_id }}</a>
+              <i class="fas fa-ban fa-xs" style="color:var(--status-rejected-fg);" title="Triage: rejected"></i>
+            </div>
+            <div class="text-muted" style="font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="{{ pir.question }}">{{ pir.question | truncate(30) }}</div>
+            <div class="mt-1">
+              <span class="badge" style="font-size:.6rem;background:var(--danger-red);color:var(--text-on-accent);">rejected</span>
+            </div>
+          </div>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="card content-card">
+  <div class="card-body p-0">
+    {% if pirs %}
+    <table class="table table-hover zsazsa-table mb-0">
+      <thead>
+        <tr>
+          {{ sort_th('ID', 'id', width='90px') }}
+          {{ sort_th('Question', 'text') }}
+          <th>Owner</th>
+          <th>Level</th>
+          <th>Priority</th>
+          {{ sort_th('Status', 'status') }}
+          <th title="Scope"><i class="fas fa-crosshairs fa-xs"></i></th>
+          {{ sort_th('Next review', 'next_review') }}
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for pir in pirs %}
+        {% set untriaged = pir.status == 'Pending' and pir.intake_status != 'rejected' %}
+        <tr class="req-row {{ 'triage-pending-row' if untriaged }}" data-req-id="{{ pir.id }}">
+          <td>
+            <a href="{{ url_for('requirements.pir_detail', id=pir.id) }}" class="text-decoration-none">
+              <span class="req-id-badge">{{ pir.pir_id }}</span>
+            </a>
+          </td>
+          <td>
+            <a href="{{ url_for('requirements.pir_detail', id=pir.id) }}" class="fw-semibold text-decoration-none">
+              {{ pir.question | truncate(90) }}
+            </a>
+          </td>
+          <td>
+            {% if pir.owner_stakeholder %}
+            <a href="{{ url_for('stakeholders.detail', id=pir.owner_stakeholder.id) }}" class="text-decoration-none text-muted small">
+              {{ pir.owner_stakeholder.name }}
+            </a>
+            {% elif pir.owner_name %}
+            <span class="text-muted small">{{ pir.owner_name }}</span>
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if pir.intel_level %}
+            <div class="d-flex flex-wrap gap-1">
+              {% for lvl in pir.intel_level %}
+              <span class="badge text-bg-light text-muted">{{ lvl }}</span>
+              {% endfor %}
+            </div>
+            {% else %}
+            <span class="text-muted small">-</span>
+            {% endif %}
+          </td>
+          <td><span class="badge priority-badge priority-{{ pir.priority | slug }}">{{ pir.priority }}</span></td>
+          <td>
+            {% if pir.intake_status == 'rejected' %}
+            <span class="badge status-badge status-rejected">Rejected</span>
+            {% else %}
+            <span class="badge status-badge status-{{ pir.status | slug }}">{{ pir.status }}</span>
+            {% if pir.intake_status == 'deferred' %}
+            <span class="badge bg-secondary ms-1" style="font-size:.65rem;">deferred</span>
+            {% endif %}
+            {% endif %}
+            {% if pir.intake_status == 'submitted' %}
+            <i class="fas fa-inbox fa-xs ms-1" style="color:var(--accent-orange);" title="Triage: submitted"></i>
+            {% elif pir.intake_status == 'acknowledged' %}
+            <i class="fas fa-eye fa-xs ms-1" style="color:var(--accent-blue);" title="Triage: acknowledged"></i>
+            {% elif pir.intake_status == 'triaged' %}
+            <i class="fas fa-clipboard-check fa-xs ms-1" style="color:var(--accent-cyan);" title="Triage: triaged"></i>
+            {% elif pir.intake_status == 'approved' %}
+            <i class="fas fa-check-circle fa-xs ms-1" style="color:var(--status-active-fg);" title="Triage: approved"></i>
+            {% elif pir.intake_status == 'rejected' %}
+            <i class="fas fa-ban fa-xs ms-1" style="color:var(--status-rejected-fg);" title="Triage: rejected"></i>
+            {% elif pir.intake_status == 'deferred' %}
+            <i class="fas fa-pause-circle fa-xs ms-1" style="color:var(--neutral-600);" title="Triage: deferred"></i>
+            {% elif pir.intake_status == 'merged' %}
+            <i class="fas fa-code-branch fa-xs ms-1" style="color:var(--neutral-600);" title="Triage: merged"></i>
+            {% endif %}
+            {% if untriaged %}
+            <div class="mt-1">
+              <button type="button" class="btn btn-xs btn-outline-warning triage-toggle"
+                      data-target="triage-row-{{ pir.id }}" aria-expanded="false" title="Triage this PIR">
+                <i class="fas fa-gavel me-1"></i>Triage
+              </button>
+            </div>
+            {% endif %}
+          </td>
+          <td>
+            {% set n = scope_counts.get(pir.id, 0) %}
+            {% if n > 0 %}
+            <span class="fp-count-badge" title="{{ n }} scope item{{ 's' if n != 1 }}">{{ n }}</span>
+            {% else %}
+            <span class="fp-count-badge fp-count-empty" title="No scope items">0</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ pir.next_review.strftime('%d-%m-%Y') if pir.next_review else '-' }}</td>
+          <td class="text-end">
+            <div class="d-inline-flex flex-nowrap gap-1 justify-content-end">
+              <button type="button" class="btn btn-xs btn-outline-info scope-preview-toggle"
+                      title="Preview matches in collection"
+                      aria-expanded="false"
+                      data-target="scope-row-{{ pir.id }}"
+                      data-fragment-url="{{ url_for('requirements.pir_scope_preview', id=pir.id, fragment=1) }}">
+                <i class="fas fa-eye"></i>
+              </button>
+              {% if pir.intake_status != 'rejected' %}
+              <a href="{{ url_for('requirements.pir_edit', id=pir.id) }}" class="btn btn-xs btn-outline-secondary" title="Edit">
+                <i class="fas fa-pen"></i>
+              </a>
+              {% endif %}
+              <form method="post" action="{{ url_for('requirements.pir_delete', id=pir.id) }}" class="d-inline" onsubmit="return confirm('Delete {{ pir.pir_id }}?')">
+                <button class="btn btn-xs btn-outline-danger" title="Delete">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        <tr id="scope-row-{{ pir.id }}" class="scope-preview-row d-none">
+          <td colspan="9" class="bg-body-secondary p-3">
+            <div class="scope-preview-body">
+              <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Loading matches&hellip;</div>
+            </div>
+          </td>
+        </tr>
+        {% if untriaged %}
+        <tr id="triage-row-{{ pir.id }}" class="triage-row d-none">
+          <td colspan="9" class="bg-body-secondary p-3">
+            {% include "requirements/_pir_triage_form.html" %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state py-5">
+      <i class="fas fa-star fa-2x text-muted mb-3 d-block"></i>
+      <p class="text-muted mb-3">No PIRs yet. Add your first priority intelligence requirement.</p>
+      <a href="{{ url_for('requirements.pir_new') }}" class="btn btn-primary btn-sm">
+        <i class="fas fa-plus me-1"></i> New PIR
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var dragging = null;
+  document.querySelectorAll('.kanban-card').forEach(function(card) {
+    if (card.getAttribute('draggable') !== 'true') return;
+    card.addEventListener('dragstart', function(e) {
+      dragging = card;
+      card.style.opacity = '0.5';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', function() {
+      card.style.opacity = '';
+      dragging = null;
+    });
+  });
+  document.querySelectorAll('.kanban-col[data-status]').forEach(function(col) {
+    col.addEventListener('dragover', function(e) {
+      if (!dragging) return;
+      e.preventDefault();
+      col.querySelector('.kanban-cards').classList.add('kanban-dragover');
+    });
+    col.addEventListener('dragleave', function() {
+      col.querySelector('.kanban-cards').classList.remove('kanban-dragover');
+    });
+    col.addEventListener('drop', function(e) {
+      e.preventDefault();
+      col.querySelector('.kanban-cards').classList.remove('kanban-dragover');
+      if (!dragging) return;
+      var newStatus = col.dataset.status;
+      var url = dragging.dataset.updateUrl;
+      if (!url) return;
+      var fd = new FormData();
+      fd.append('status', newStatus);
+      var csrf = document.querySelector('meta[name="csrf-token"]');
+      var headers = {};
+      if (csrf) headers['X-CSRF-Token'] = csrf.content;
+      fetch(url, {method: 'POST', body: fd, headers: headers})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) { window.location.reload(); }
+          else { alert('Could not update status: ' + (data.error || 'unknown error')); }
+        })
+        .catch(function() { alert('Status update failed.'); });
+    });
+  });
+})();
+</script>
+{% include "requirements/_triage_js.html" %}
+{% include "requirements/_list_scope_js.html" %}
+{% endblock %}

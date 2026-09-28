@@ -1,0 +1,1161 @@
+{% extends "base.html" %}
+
+{% set VALUE_CHIP_CONFIG = {
+  'scraper:data-collection-source': {
+    'icon': 'fa-at', 'cls': 'chip-source',
+    'label': '', 'cloud_hide': false
+  },
+  'scraper:primary-data-collection-source': {
+    'icon': 'fa-globe', 'cls': 'chip-primary-source',
+    'label': '', 'cloud_hide': true
+  },
+  'admiralty-scale:source-reliability': {
+    'icon': 'fa-star-half-stroke', 'cls': 'chip-admiralty-reliability',
+    'label': 'Source reliability', 'cloud_hide': false
+  },
+  'admiralty-scale:information-credibility': {
+    'icon': 'fa-check-double', 'cls': 'chip-admiralty-credibility',
+    'label': 'Information credibility', 'cloud_hide': false
+  },
+} %}
+
+{% block title %}Data collection | zsazsa CTI{% endblock %}
+{% block page_title %}Data collection{% endblock %}
+
+{% block topbar_actions %}
+<span id="selected-count-badge" class="badge text-bg-secondary d-none">
+  <span id="selected-count">0</span> selected
+</span>
+<div class="dropdown">
+  <button class="btn btn-sm btn-primary dropdown-toggle disabled" type="button" id="create-product-btn"
+          data-bs-toggle="dropdown" aria-expanded="false" disabled>
+    <i class="fas fa-plus me-1"></i>Create product
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><a class="dropdown-item create-product-item" href="#" data-product-action="daily-briefing"><i class="fas fa-newspaper me-2"></i>Add to daily briefing (new)</a></li>
+    <li><a class="dropdown-item" href="#" id="add-to-existing-briefing-item"><i class="fas fa-newspaper me-2"></i>Add to existing draft briefing</a></li>
+    <li><a class="dropdown-item create-product-item" href="#" data-product-action="flash-intel"><i class="fas fa-bolt me-2"></i>Flash intel alert</a></li>
+    <li><a class="dropdown-item create-product-item" href="#" data-product-action="vea"><i class="fas fa-shield-halved me-2"></i>Vulnerability advisory</a></li>
+    <li><a class="dropdown-item create-product-item" href="#" data-product-action="detection-eng"><i class="fas fa-crosshairs me-2"></i>Detection engineering request</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item create-product-item" href="#" data-product-action="threat-landscape-report"><i class="fas fa-map me-2"></i>Add to threat landscape queue</a></li>
+  </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "data_collection/_toolbar_css.html" %}
+<div class="action-panel action-bar">
+  <div class="action-panel-head">
+    <span class="action-panel-title"><i class="fas fa-layer-group me-1"></i> Filters and actions</span>
+    <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+      <span class="text-muted small" style="font-variant-numeric:tabular-nums;white-space:nowrap;">
+        <span id="visible-count">{{ events | length }}</span>
+        <span id="total-count-note" style="font-size:.85em;color:var(--neutral-500);"></span>
+        events
+      </span>
+      <button class="btn btn-xs btn-link text-danger p-0" id="clear-filters-btn"
+              style="display:none;white-space:nowrap;font-size:.78rem;">
+        <i class="fas fa-xmark me-1"></i>Clear
+      </button>
+      <span class="text-muted" style="font-size:.7rem;user-select:none;">·</span>
+      <button class="action-pill" id="refresh-btn" title="Trigger background cache refresh">
+        <i class="fas fa-arrows-rotate" style="font-size:.75rem;"></i> Refresh cache
+      </button>
+      <small id="refresh-countdown"
+             data-interval-s="{{ cache_interval_s }}"
+             data-last-fetch="{{ cache_last_fetch_ts or '' }}"
+             class="action-pill-refresh-meta"></small>
+      <i class="fas fa-circle-info" id="refresh-info" role="button" tabindex="0"
+         style="font-size:.75rem;color:var(--alt4-info-icon);cursor:help;"
+         data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-placement="bottom" data-bs-html="true"
+         data-bs-title="How cache refresh works"
+         data-bs-content="The cache is refreshed automatically every <strong>{{ (cache_interval_s // 60) }} minutes</strong> by a background worker that polls every configured source. Clicking <strong>Refresh cache</strong> wakes the worker early without changing the schedule."></i>
+    </div>
+  </div>
+
+  <div class="action-panel-body">
+
+    <!-- Line 1: filters left, "bring data in" actions right -->
+    <div class="toolbar-row">
+      <div class="alt4-search">
+        <i class="fas fa-search search-icon"></i>
+        <input type="text" id="search-input" placeholder="Search events…" autocomplete="off" spellcheck="false">
+        <button class="btn btn-xs btn-link text-muted p-0" id="search-clear" style="display:none;">
+          <i class="fas fa-xmark fa-xs"></i>
+        </button>
+      </div>
+
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" id="date-dd-btn" data-bs-toggle="dropdown">
+          <i class="fas fa-calendar me-1 text-muted"></i><span id="date-btn-label">Date</span>
+        </button>
+        <div class="dropdown-menu p-2" style="min-width:150px;">
+          <div class="d-flex flex-column gap-1">
+            <button class="btn btn-sm btn-outline-secondary date-filter-btn active text-start"
+                    data-date-filter="none" data-date-label="Date">No filter</button>
+            <button class="btn btn-sm btn-outline-secondary date-filter-btn text-start"
+                    data-date-filter="today" data-date-label="Today">Today</button>
+            <button class="btn btn-sm btn-outline-secondary date-filter-btn text-start"
+                    data-date-filter="48h" data-date-label="Last 48h">Last 48h</button>
+            <button class="btn btn-sm btn-outline-secondary date-filter-btn text-start"
+                    data-date-filter="7d" data-date-label="Last 7d">Last 7d</button>
+            <hr class="my-1">
+            <button class="btn btn-sm btn-outline-secondary date-filter-btn text-start"
+                    data-date-filter="older-48h" data-date-label="Older than 48h">Older than 48h</button>
+            <button class="btn btn-sm btn-outline-secondary date-filter-btn text-start"
+                    data-date-filter="older-7d" data-date-label="Older than 7d">Older than 7d</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-sm btn-outline-secondary alt4-panel-toggle" id="tags-toggle-btn"
+              data-bs-toggle="collapse" data-bs-target="#alt4-tags-panel" aria-expanded="false">
+        <i class="fas fa-tags me-1"></i>Tags
+        <span class="badge ms-1 d-none" id="tags-active-badge"
+              style="font-size:.58rem;padding:.15em .4em;background:var(--overlay-black-15);">0</span>
+      </button>
+
+      <button class="btn btn-sm btn-outline-secondary alt4-panel-toggle" id="org-toggle-btn"
+              data-bs-toggle="collapse" data-bs-target="#alt4-org-panel" aria-expanded="false">
+        <i class="fas fa-building me-1"></i>Org
+        <span class="badge ms-1 d-none" id="org-active-badge"
+              style="font-size:.58rem;padding:.15em .4em;background:var(--overlay-black-15);">0</span>
+      </button>
+
+      <button class="btn btn-sm btn-outline-secondary alt4-panel-toggle" id="more-toggle-btn"
+              data-bs-toggle="collapse" data-bs-target="#alt4-more-panel" aria-expanded="false">
+        <i class="fas fa-sliders me-1"></i>More
+      </button>
+
+      <button class="btn btn-sm btn-outline-secondary alt4-panel-toggle" id="cti-toggle-btn"
+              data-bs-toggle="collapse" data-bs-target="#alt4-cti-panel" aria-expanded="false">
+        <i class="fas fa-microscope me-1"></i>CTI Eval
+      </button>
+
+      <div class="toolbar-actions">
+        <button type="button" class="action-chip" id="pull-event-btn" style="--tile-accent: var(--accent-blue);"
+                data-bs-toggle="modal" data-bs-target="#pull-event-modal"
+                title="Pull a specific event from a MISP source into the cache">
+          <span class="action-chip-icon"><i class="fas fa-download"></i></span>Pull event
+        </button>
+        {% if has_manual_sources %}
+        <a href="{{ url_for('data_collection.manual_new') }}" class="action-chip" style="--tile-accent: var(--accent-green);"
+           title="Manually add intelligence from a configured source">
+          <span class="action-chip-icon"><i class="fas fa-file-import"></i></span>Manual entry
+        </a>
+        {% else %}
+        <span class="action-chip disabled" style="--tile-accent: var(--accent-green);"
+              title="No enabled manual sources configured. Add them under Configuration › Collection sources › Manual sources">
+          <span class="action-chip-icon"><i class="fas fa-file-import"></i></span>Manual entry
+        </span>
+        {% endif %}
+        <a href="{{ url_for('data_collection.newsletter_new') }}" class="action-chip" style="--tile-accent: var(--accent-orange);"
+           title="Paste a security newsletter and pick which articles to collect">
+          <span class="action-chip-icon"><i class="fas fa-envelope-open-text"></i></span>Newsletter
+        </a>
+        <a href="{{ url_for('data_collection.newsletter_pending') }}" class="action-chip" style="--tile-accent: #7c5cd6;"
+           title="Review email sources collected from mailboxes">
+          <span class="action-chip-icon"><i class="fas fa-inbox"></i></span>Email sources
+        </a>
+      </div>
+    </div>
+
+    <!-- Line 2: sources left, view options right -->
+    {% set source_accents = {'scraper': 'var(--accent-blue)', 'misp': '#7c5cd6', 'manual': 'var(--accent-green)'} %}
+    <div class="toolbar-row">
+      <div id="style-current" class="chip-sources d-flex flex-wrap gap-2">
+        {% for s in sources %}
+        {% set st = cache_status.get(s.id) %}
+        {% set has_err = source_errors.get(s.id) %}
+        <div class="source-toggle source-toggle-on {{ 'source-toggle-err' if has_err else '' }}"
+             data-source-id="{{ s.id }}"
+             style="--tile-accent: {{ source_accents.get(s.kind, 'var(--accent-blue)') }};"
+             title="{{ s.url or '' }}{% if has_err %} · Error: {{ has_err }}{% endif %}">
+          <span class="source-toggle-icon">
+            {% if s.kind == 'scraper' %}<i class="fas fa-spider"></i>
+            {% elif s.kind == 'manual' %}<i class="fas fa-file-import"></i>
+            {% else %}<i class="fas fa-server"></i>{% endif %}
+          </span>
+          <span class="source-chip-text">
+            <span class="source-toggle-label">{{ s.label }}</span>
+            {% if s.kind == 'misp' %}<span class="source-chip-sub">last {{ s.since_days }}d</span>
+            {% elif s.kind == 'manual' %}<span class="source-chip-sub">manual</span>
+            {% elif s.kind == 'scraper' and s.imap_sources %}
+              {% for imp in s.imap_sources %}
+              <span class="source-chip-sub" title="Collected from an IMAP mailbox via the scraper">
+                <i class="fas fa-envelope fa-xs me-1" style="opacity:.6;"></i>{{ imp }}
+              </span>
+              {% endfor %}
+            {% endif %}
+          </span>
+          {% if has_err %}
+            <span class="source-toggle-badge text-bg-danger"><i class="fas fa-triangle-exclamation"></i></span>
+          {% elif st %}
+            <span class="source-toggle-badge text-bg-light text-muted">{{ st.event_count }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="toolbar-actions">
+        <button class="action-pill hide-rej-btn is-hiding" id="hide-rejected-btn"
+                title="Toggle visibility of rejected events (workflow:state=rejected)">
+          <i class="fas fa-eye" style="font-size:.75rem;"></i>
+          <span class="hide-rej-label">Show rejected</span>
+        </button>
+        <button class="action-pill" id="save-preset-btn" title="Save current filters as a named preset">
+          <i class="fas fa-floppy-disk" style="font-size:.75rem;"></i> Save preset
+        </button>
+        <div class="dropdown">
+          <button class="action-pill" id="load-preset-btn" data-bs-toggle="dropdown"
+                  title="Load a saved filter preset">
+            <i class="fas fa-folder-open" style="font-size:.75rem;"></i> Load preset
+          </button>
+          <div class="dropdown-menu dropdown-menu-end p-2" id="preset-dropdown-content" style="min-width:300px;"></div>
+        </div>
+        <span id="preset-active-indicator" class="preset-active-indicator d-none" title="Current loaded filter preset status">
+          <i class="fas fa-bookmark"></i>
+          <span>Preset:</span>
+          <strong class="preset-name"></strong>
+          <span class="preset-state text-muted"></span>
+          <button type="button" class="preset-clear-btn" id="preset-clear-btn" title="Detach this preset" aria-label="Detach preset">
+            <i class="fas fa-xmark"></i>
+          </button>
+        </span>
+      </div>
+    </div>
+
+    {% if briefing_pending_reject_uuids %}
+    <!-- Line 3: only when the briefing exclusions match something -->
+    <div class="toolbar-row">
+      <span class="exclusion-actions">
+        <button type="button" class="action-pill" id="preview-excluded-btn"
+                title="Preview: show only events that would be set aside ({{ briefing_pending_reject_uuids | length }} event{{ 's' if briefing_pending_reject_uuids | length != 1 }})">
+          <i class="fas fa-eye" style="font-size:.75rem;"></i>
+        </button>
+        <button type="button" class="action-pill action-pill-danger" id="bulk-reject-btn"
+                title="Set aside every event matching a daily briefing title exclusion pattern: workflow:state=rejected on your own MISP, the dismiss tag for events from another MISP server">
+          <i class="fas fa-ban" style="font-size:.75rem;"></i>
+          Set aside <span id="bulk-reject-count">{{ briefing_pending_reject_uuids | length }}</span> event{{ 's' if briefing_pending_reject_uuids | length != 1 }} matching exclusions
+        </button>
+      </span>
+      <span id="bulk-reject-result" class="small d-none"></span>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% include "data_collection/_filter_panels.html" %}
+
+{% include "data_collection/_list_table.html" %}
+{% endblock %}
+
+{% block scripts %}
+{% include "data_collection/_list_js.html" %}
+<script>
+/* ── Toolbar behaviour: filter button states, preview, bulk reject ── */
+(function() {
+
+  /* Date dropdown: update button label when a date preset is chosen */
+  document.querySelectorAll('.date-filter-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var label = btn.dataset.dateLabel || 'Date';
+      var labelEl = document.getElementById('date-btn-label');
+      var ddBtn = document.getElementById('date-dd-btn');
+      if (labelEl) labelEl.textContent = label;
+      if (ddBtn) {
+        var isFiltered = btn.dataset.dateFilter !== 'none';
+        ddBtn.classList.toggle('has-filter', isFiltered);
+        ddBtn.classList.toggle('btn-primary', isFiltered);
+        ddBtn.classList.toggle('btn-outline-secondary', !isFiltered);
+      }
+    });
+  });
+
+  /* Button-state indicators: update has-filter class on each toggle */
+  function refreshToggleBtnStates() {
+    var s = window.zsazsaCollectionState;
+    if (!s) return;
+
+    /* Tags button */
+    var activeTagCount = s.include.size + s.exclude.size;
+    var tagsBtn = document.getElementById('tags-toggle-btn');
+    var tagsBadge = document.getElementById('tags-active-badge');
+    if (tagsBtn) tagsBtn.classList.toggle('has-filter', activeTagCount > 0);
+    if (tagsBadge) {
+      tagsBadge.textContent = activeTagCount;
+      tagsBadge.classList.toggle('d-none', activeTagCount === 0);
+    }
+
+    /* Org button */
+    var activeOrgCount = s.includeOrgs.size + s.excludeOrgs.size;
+    var orgBtn = document.getElementById('org-toggle-btn');
+    var orgBadge = document.getElementById('org-active-badge');
+    if (orgBtn) orgBtn.classList.toggle('has-filter', activeOrgCount > 0);
+    if (orgBadge) {
+      orgBadge.textContent = activeOrgCount;
+      orgBadge.classList.toggle('d-none', activeOrgCount === 0);
+    }
+
+    /* More button: active when any event-property filter is set */
+    var moreActive = s.flagFilter !== 'any' ||
+      s.vulnFilter !== 'any' || s.aiFilter !== 'any' ||
+      s.reportsFilter !== 'any' || s.reqMatchFilter !== 'any';
+    var moreBtn = document.getElementById('more-toggle-btn');
+    if (moreBtn) moreBtn.classList.toggle('has-filter', moreActive);
+
+    /* CTI Eval button */
+    var ctiBtn = document.getElementById('cti-toggle-btn');
+    if (ctiBtn) ctiBtn.classList.toggle('has-filter', !!s.ctiPredicate);
+
+    /* Date button label — update to match current dateFilter regardless of how
+       the filter was changed (user click, clear-all, or preset restore) */
+    var dateLabelEl = document.getElementById('date-btn-label');
+    var dateDdBtn = document.getElementById('date-dd-btn');
+    if (dateLabelEl || dateDdBtn) {
+      var dateLabel = 'Date';
+      document.querySelectorAll('.date-filter-btn').forEach(function(b) {
+        if (b.dataset.dateFilter === s.dateFilter && b.dataset.dateLabel) {
+          dateLabel = b.dataset.dateLabel;
+        }
+      });
+      if (dateLabelEl) dateLabelEl.textContent = dateLabel;
+      var isDateFiltered = s.dateFilter !== 'none';
+      if (dateDdBtn) {
+        dateDdBtn.classList.toggle('has-filter', isDateFiltered);
+        dateDdBtn.classList.toggle('btn-primary', isDateFiltered);
+        dateDdBtn.classList.toggle('btn-outline-secondary', !isDateFiltered);
+      }
+    }
+
+    /* Preview button */
+    var pBtn = document.getElementById('preview-excluded-btn');
+    if (pBtn) pBtn.classList.toggle('action-pill-preview-active', !!s.pendingRejectUuids);
+
+    /* Hide-rejected button */
+    var hrBtn = document.getElementById('hide-rejected-btn');
+    if (hrBtn) {
+      var hiding = s.hideRejected;
+      hrBtn.classList.toggle('is-hiding', hiding);
+      hrBtn.classList.toggle('is-showing', !hiding);
+      var hrIcon = hrBtn.querySelector('i');
+      var hrLabel = hrBtn.querySelector('.hide-rej-label');
+      if (hrIcon) hrIcon.className = 'fas ' + (hiding ? 'fa-eye' : 'fa-eye-slash') + ' ms-0';
+      if (hrIcon) hrIcon.style.opacity = '.75';
+      if (hrLabel) hrLabel.textContent = hiding ? 'Show rejected' : 'Hide rejected';
+    }
+  }
+
+  /* Watch table-count (updated by applyAll) to trigger button-state refresh */
+  var tableCount = document.getElementById('table-count');
+  if (tableCount) {
+    new MutationObserver(refreshToggleBtnStates)
+      .observe(tableCount, {childList: true, characterData: true, subtree: true});
+  }
+
+  /* Reset date button label when "Clear all" is clicked */
+  var clearBtn = document.getElementById('clear-filters-btn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function() {
+      var labelEl = document.getElementById('date-btn-label');
+      var ddBtn = document.getElementById('date-dd-btn');
+      if (labelEl) labelEl.textContent = 'Date';
+      if (ddBtn) {
+        ddBtn.classList.remove('has-filter', 'btn-primary');
+        ddBtn.classList.add('btn-outline-secondary');
+      }
+    });
+  }
+
+  /* Preview button: filter table to events pending rejection */
+  var pendingRejectUuids = new Set({{ briefing_pending_reject_uuids | list | tojson }});
+  var previewBtn = document.getElementById('preview-excluded-btn');
+  var bulkRejectCount = document.getElementById('bulk-reject-count');
+
+  // Events matching an exclusion that would be set aside, given the current
+  // filters but ignoring the row display cap, so the preview tooltip and the
+  // reject button always report (and act on) the same set.
+  function getMatchingPendingRejectUuids() {
+    var out = [];
+    document.querySelectorAll('#events-tbody tr.event-row').forEach(function(row) {
+      if (row.dataset.passesFilter !== '1') return;
+      var uuid = row.dataset.uuid || '';
+      if (uuid && pendingRejectUuids.has(uuid)) out.push(uuid);
+    });
+    return out;
+  }
+
+  function updateExclusionCounts() {
+    var n = getMatchingPendingRejectUuids().length;
+    if (bulkRejectCount) bulkRejectCount.textContent = String(n);
+    if (previewBtn) {
+      previewBtn.setAttribute('title',
+        'Preview: show only events that would be set aside (' + n + ' event' + (n === 1 ? '' : 's') + ')');
+    }
+  }
+
+  if (tableCount) {
+    new MutationObserver(updateExclusionCounts)
+      .observe(tableCount, {childList: true, characterData: true, subtree: true});
+  }
+
+  updateExclusionCounts();
+
+  if (previewBtn && pendingRejectUuids.size > 0) {
+    previewBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var s = window.zsazsaCollectionState;
+      if (!s) return;
+
+      /* Preview must only toggle the pending-reject subset filter and keep all
+         existing filters (date, tags, sources, orgs, tri-state filters, etc.). */
+      var preserved = {
+        q: s.q,
+        sortCol: s.sortCol,
+        sortDir: s.sortDir,
+        include: new Set(s.include),
+        exclude: new Set(s.exclude),
+        activeSources: new Set(s.activeSources),
+        includeOrgs: new Set(s.includeOrgs),
+        excludeOrgs: new Set(s.excludeOrgs),
+        hideRejected: s.hideRejected,
+        dismissedFilter: s.dismissedFilter,
+        flagFilter: s.flagFilter,
+        dateFilter: s.dateFilter,
+        aiFilter: s.aiFilter,
+        reportsFilter: s.reportsFilter,
+        reqMatchFilter: s.reqMatchFilter,
+        vulnFilter: s.vulnFilter,
+        anyProductFilter: s.anyProductFilter,
+        ctiPredicate: s.ctiPredicate,
+        ctiOperator: s.ctiOperator,
+        ctiValue: s.ctiValue,
+      };
+
+      if (s.pendingRejectUuids) {
+        s.pendingRejectUuids = null;
+      } else {
+        s.pendingRejectUuids = pendingRejectUuids;
+      }
+
+      s.q = preserved.q;
+      s.sortCol = preserved.sortCol;
+      s.sortDir = preserved.sortDir;
+      s.include = preserved.include;
+      s.exclude = preserved.exclude;
+      s.activeSources = preserved.activeSources;
+      s.includeOrgs = preserved.includeOrgs;
+      s.excludeOrgs = preserved.excludeOrgs;
+      s.hideRejected = preserved.hideRejected;
+      s.dismissedFilter = preserved.dismissedFilter;
+      s.flagFilter = preserved.flagFilter;
+      s.dateFilter = preserved.dateFilter;
+      s.aiFilter = preserved.aiFilter;
+      s.reportsFilter = preserved.reportsFilter;
+      s.reqMatchFilter = preserved.reqMatchFilter;
+      s.vulnFilter = preserved.vulnFilter;
+      s.anyProductFilter = preserved.anyProductFilter;
+      s.ctiPredicate = preserved.ctiPredicate;
+      s.ctiOperator = preserved.ctiOperator;
+      s.ctiValue = preserved.ctiValue;
+
+      window.zsazsaCollectionApply();
+    });
+  }
+
+  /* Hide-rejected toggle */
+  var hideRejBtn = document.getElementById('hide-rejected-btn');
+  if (hideRejBtn) {
+    hideRejBtn.addEventListener('click', function() {
+      var s = window.zsazsaCollectionState;
+      if (!s) return;
+      s.hideRejected = !s.hideRejected;
+      window.zsazsaCollectionApply();
+    });
+  }
+
+  /* Run once after shared JS initialises */
+  setTimeout(refreshToggleBtnStates, 50);
+
+  /* Bulk-reject events matching briefing exclusions */
+  var bulkRejectBtn = document.getElementById('bulk-reject-btn');
+  var bulkRejectResult = document.getElementById('bulk-reject-result');
+  if (bulkRejectBtn) {
+    bulkRejectBtn.addEventListener('click', function() {
+      var targetUuids = getMatchingPendingRejectUuids();
+      if (!targetUuids.length) {
+        if (bulkRejectResult) {
+          bulkRejectResult.textContent = 'No matching events for the current filters.';
+          bulkRejectResult.className = 'small ms-1 text-warning';
+        }
+        return;
+      }
+      if (!confirm('Set aside all events matching the daily briefing exclusion patterns under the current filters?\n\nThis tags ' + targetUuids.length + ' event(s) in MISP: workflow:state=rejected for events on your own MISP, the dismiss tag for events from another MISP server. The action cannot be undone from here.')) {
+        return;
+      }
+      var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      bulkRejectBtn.disabled = true;
+      bulkRejectBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="font-size:.75rem;"></i> Working…';
+      if (bulkRejectResult) { bulkRejectResult.className = 'small d-none'; bulkRejectResult.textContent = ''; }
+
+      fetch('{{ url_for("data_collection.bulk_reject_excluded") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+        body: JSON.stringify({uuids: targetUuids}),
+      })
+      .then(zsazsaReadJson)
+      .then(function(data) {
+        bulkRejectBtn.disabled = false;
+        bulkRejectBtn.innerHTML = '<i class="fas fa-ban" style="font-size:.75rem;"></i> Set aside events matching exclusions';
+        if (bulkRejectResult) {
+          bulkRejectResult.textContent = data.message || (data.ok ? 'Done.' : 'Error.');
+          bulkRejectResult.className = 'small ms-1 ' + (data.ok ? 'text-success' : 'text-danger');
+        }
+        if (data.ok && (data.rejected > 0 || data.dismissed > 0)) {
+          setTimeout(function() { window.location.reload(); }, 1500);
+        }
+      })
+      .catch(function(err) {
+        bulkRejectBtn.disabled = false;
+        bulkRejectBtn.innerHTML = '<i class="fas fa-ban" style="font-size:.75rem;"></i> Set aside events matching exclusions';
+        if (bulkRejectResult) {
+          bulkRejectResult.textContent = 'Setting aside did not complete: ' + zsazsaErrorText(err);
+          bulkRejectResult.className = 'small ms-1 text-danger';
+        }
+      });
+    });
+  }
+
+})();
+
+/* ── Scope tagger ─────────────────────────────────────────────────────── */
+(function() {
+  var SCOPE_GALAXY = {{ scope_galaxy | tojson }};
+  var SCOPE_LABELS = { geo:'Geographic scope', sectors:'Sector scope', threat_actors:'Threat actors', mitre:'MITRE ATT&CK' };
+  var SCOPE_ICONS  = { geo:'fa-globe', sectors:'fa-building', threat_actors:'fa-user-secret', mitre:'fa-shield-halved' };
+
+  var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  var activePanelRow = null;
+  var activeBtn = null;
+  /* pending: tag → 'add' | 'remove' — set when user toggles, submitted on Apply */
+  var pendingChanges = {};
+
+  /* tag → display value map */
+  var TAG_TO_VALUE = {};
+  Object.keys(SCOPE_GALAXY).forEach(function(t) {
+    (SCOPE_GALAXY[t] || []).forEach(function(item) { TAG_TO_VALUE[item.tag] = item.value; });
+  });
+
+  /* Pull the value portion out of a galaxy tag, e.g. 'misp-galaxy:country="Iran"' -> 'Iran'. */
+  function tagValue(tag) {
+    var idx = tag.indexOf('=');
+    var v = idx === -1 ? tag : tag.slice(idx + 1);
+    return v.replace(/^"(.*)"$/, '$1');
+  }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function closePanel() {
+    if (activePanelRow) { activePanelRow.remove(); activePanelRow = null; }
+    if (activeBtn) { activeBtn.classList.remove('active'); activeBtn = null; }
+    pendingChanges = {};
+  }
+
+  function openPanel(btn, uuid, sourceId, type) {
+    if (activeBtn === btn) { closePanel(); return; }
+    closePanel();
+    btn.classList.add('active');
+    activeBtn = btn;
+
+    var eventRow = btn.closest('tr.event-row');
+    if (!eventRow) return;
+    var currentTags = new Set(JSON.parse(eventRow.dataset.tags || '[]'));
+    var items = SCOPE_GALAXY[type] || [];
+
+    /* Threat-actor tags already on the event that aren't part of the canonical
+       galaxy list (e.g. manually added free-text names) need their own entry
+       so they render as a checkbox/chip and can be removed from the panel. */
+    if (type === 'threat_actors') {
+      currentTags.forEach(function(t) {
+        if (!t.startsWith('misp-galaxy:threat-actor=')) return;
+        var v = tagValue(t);
+        var known = items.some(function(it) { return (it.value || '').toLowerCase() === v.toLowerCase(); });
+        if (!known) items.push({value: v, tag: t});
+      });
+    }
+
+    /* Tag prefixes recognised for this category (e.g. geo spans both
+       "misp-galaxy:country=" and "misp-galaxy:target-information="), so
+       value-based matching below doesn't cross over into other categories. */
+    var knownPrefixes = {};
+    items.forEach(function(it) {
+      var i = it.tag.indexOf('=');
+      if (i !== -1) knownPrefixes[it.tag.slice(0, i + 1)] = true;
+    });
+    function findMatchingTag(value) {
+      var lower = value.toLowerCase();
+      var found = null;
+      currentTags.forEach(function(t) {
+        if (found) return;
+        var i = t.indexOf('=');
+        var prefix = i === -1 ? t : t.slice(0, i + 1);
+        if (knownPrefixes[prefix] && tagValue(t).toLowerCase() === lower) found = t;
+      });
+      return found;
+    }
+
+    var panelRow = document.createElement('tr');
+    panelRow.className = 'scope-panel-row';
+    var td = document.createElement('td');
+    td.colSpan = 9;
+    td.innerHTML =
+      '<div class="scope-panel-container">' +
+        '<div class="scope-panel-header">' +
+          '<i class="fas ' + SCOPE_ICONS[type] + ' me-1" style="color:var(--accent-blue);font-size:.8rem;"></i>' +
+          '<span class="scope-panel-type-label">' + SCOPE_LABELS[type] + '</span>' +
+          '<input class="scope-panel-search" placeholder="Filter…" autocomplete="off">' +
+          '<button type="button" class="btn btn-xs btn-success scope-apply-btn ms-2" title="Apply selected tags to event" disabled>' +
+            '<i class="fas fa-check me-1"></i>Apply' +
+          '</button>' +
+          '<button type="button" class="btn btn-xs btn-link text-muted p-0 ms-2 scope-close-btn">' +
+            '<i class="fas fa-xmark fa-sm"></i>' +
+          '</button>' +
+        '</div>' +
+        '<div class="scope-selected-chips"></div>' +
+        (type === 'threat_actors'
+          ? '<div class="scope-custom-add">' +
+              '<input type="text" class="form-control form-control-sm scope-custom-input" placeholder="Add threat actor name not in galaxy list…" autocomplete="off">' +
+              '<button type="button" class="btn btn-xs btn-outline-primary scope-custom-add-btn"><i class="fas fa-plus me-1"></i>Add</button>' +
+            '</div>'
+          : '') +
+        '<div class="scope-item-list"></div>' +
+      '</div>';
+
+    panelRow.appendChild(td);
+    eventRow.insertAdjacentElement('afterend', panelRow);
+    activePanelRow = panelRow;
+
+    var chipsEl = td.querySelector('.scope-selected-chips');
+    var listEl  = td.querySelector('.scope-item-list');
+    var searchEl = td.querySelector('.scope-panel-search');
+    var applyBtn = td.querySelector('.scope-apply-btn');
+    var customInput = td.querySelector('.scope-custom-input');
+    var customAddBtn = td.querySelector('.scope-custom-add-btn');
+
+    function updateApplyBtn() {
+      var hasPending = Object.keys(pendingChanges).length > 0;
+      applyBtn.disabled = !hasPending;
+    }
+
+    /* Returns a callback that immediately removes a tag from the event via API.
+       Used for chips that were already tagged when the panel opened — × on those
+       should remove without needing Apply. Captures the openPanel closure. */
+    function makeImmediateRemove(tag, cb) {
+      return function(chip) {
+        fetch(SCRIPT_ROOT + '/collection/' + encodeURIComponent(uuid) + '/scope-tag', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({source: sourceId, tag: tag, action: 'remove'}),
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (!d.ok) return;
+          currentTags.delete(tag);
+          chip.remove();
+          if (cb) cb.checked = false;
+          delete pendingChanges[tag];
+          updateRowDataTags(eventRow, currentTags);
+          rebuildGalaxyLine(eventRow, currentTags);
+          updateApplyBtn();
+        }).catch(function() {});
+      };
+    }
+
+    function renderScopeItem(item) {
+      var lbl = document.createElement('label');
+      lbl.className = 'scope-item';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+
+      /* Tags on the event may carry a different casing — or even a different
+         galaxy prefix (country vs target-information) — than the canonical
+         entry shown here (e.g. event tagged "iran", list shows "Iran").
+         Match by the tag's value portion, case-insensitively, so the
+         checkbox reflects reality, and act on the tag as it actually exists
+         on the event (checkbox value, chip, add/remove call) so the
+         apply/revert logic keeps matching it. */
+      var matchedTag = findMatchingTag(item.value);
+      var effectiveTag = matchedTag || item.tag;
+      var chipItem = matchedTag ? {value: item.value, tag: matchedTag} : item;
+      cb.value = effectiveTag;
+
+      cb.checked = !!matchedTag;
+      var span = document.createElement('span');
+      span.textContent = item.value;
+      lbl.appendChild(cb);
+      lbl.appendChild(span);
+      listEl.appendChild(lbl);
+
+      /* Pre-tagged items: show chip with immediate-remove handler (no Apply needed) */
+      if (cb.checked) addChipEl(chipItem, chipsEl, makeImmediateRemove(effectiveTag, cb));
+
+      cb.addEventListener('change', function() {
+        var isTaggedNow = currentTags.has(effectiveTag);
+        if (cb.checked) {
+          if (!isTaggedNow) {
+            /* Pending new addition — × undoes the selection without API call */
+            pendingChanges[effectiveTag] = 'add';
+            addChipEl({value: item.value, tag: effectiveTag}, chipsEl, function(chip) {
+              cb.checked = false;
+              chip.remove();
+              delete pendingChanges[effectiveTag];
+              updateApplyBtn();
+            });
+          } else {
+            delete pendingChanges[effectiveTag];
+            if (!chipsEl.querySelector('[data-chip-tag="' + effectiveTag.replace(/"/g,'\\"') + '"]')) {
+              addChipEl(chipItem, chipsEl, makeImmediateRemove(effectiveTag, cb));
+            }
+          }
+        } else {
+          if (isTaggedNow) {
+            /* Queue removal — submit via Apply */
+            pendingChanges[effectiveTag] = 'remove';
+            removeChipEl(effectiveTag, chipsEl);
+          } else {
+            delete pendingChanges[effectiveTag];
+            removeChipEl(effectiveTag, chipsEl);
+          }
+        }
+        updateApplyBtn();
+      });
+      return cb;
+    }
+
+    /* Build checkboxes */
+    items.forEach(renderScopeItem);
+
+    function normaliseThreatActorName(raw) {
+      var cleaned = String(raw || '').trim().replace(/"+/g, "'");
+      return cleaned;
+    }
+
+    function customThreatActorTag(name) {
+      return 'misp-galaxy:threat-actor="' + name + '"';
+    }
+
+    function hasListedValue(name) {
+      var lower = name.toLowerCase();
+      return items.some(function(it) { return (it.value || '').toLowerCase() === lower; });
+    }
+
+    if (type === 'threat_actors' && customInput && customAddBtn) {
+      function addCustomThreatActor() {
+        var name = normaliseThreatActorName(customInput.value);
+        if (!name) return;
+
+        var matchedTag = findMatchingTag(name);
+        var tag = matchedTag || customThreatActorTag(name);
+        var item = {value: name, tag: tag};
+
+        if (!hasListedValue(name)) {
+          items.push(item);
+          var cb = renderScopeItem(item);
+          if (!matchedTag) {
+            cb.checked = true;
+            cb.dispatchEvent(new Event('change'));
+          }
+        } else {
+          listEl.querySelectorAll('.scope-item').forEach(function(lbl) {
+            var txt = (lbl.textContent || '').trim().toLowerCase();
+            if (txt !== name.toLowerCase()) return;
+            var cb = lbl.querySelector('input[type="checkbox"]');
+            if (cb && !cb.checked) {
+              cb.checked = true;
+              cb.dispatchEvent(new Event('change'));
+            }
+          });
+        }
+
+        customInput.value = '';
+        customInput.focus();
+      }
+
+      customAddBtn.addEventListener('click', function() {
+        addCustomThreatActor();
+      });
+      customInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addCustomThreatActor();
+        }
+      });
+    }
+
+    /* Search filter */
+    searchEl.addEventListener('input', function() {
+      var q = searchEl.value.toLowerCase().trim();
+      listEl.querySelectorAll('.scope-item').forEach(function(lbl) {
+        lbl.classList.toggle('hidden', q !== '' && lbl.textContent.toLowerCase().indexOf(q) === -1);
+      });
+    });
+
+    /* Apply button: submit all pending changes, then rebuild galaxy line */
+    applyBtn.addEventListener('click', function() {
+      var tags = Object.keys(pendingChanges);
+      if (!tags.length) return;
+      applyBtn.disabled = true;
+      applyBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving…';
+
+      var promises = tags.map(function(tag) {
+        return fetch(SCRIPT_ROOT + '/collection/' + encodeURIComponent(uuid) + '/scope-tag', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken},
+          body: JSON.stringify({source: sourceId, tag: tag, action: pendingChanges[tag]}),
+        }).then(function(r) { return r.json(); }).then(function(d) { return {tag: tag, action: pendingChanges[tag], ok: d.ok}; })
+          .catch(function() { return {tag: tag, action: pendingChanges[tag], ok: false}; });
+      });
+
+      Promise.all(promises).then(function(results) {
+        results.forEach(function(r) {
+          if (!r.ok) return;
+          if (r.action === 'add') {
+            currentTags.add(r.tag);
+            /* The chip still has its "undo-pending-add" callback. Now that the
+               tag is actually on the event, upgrade it to an immediate-remove
+               callback so clicking × properly removes it via the API. */
+            var existingCb = listEl.querySelector('input[value="' + r.tag.replace(/"/g,'\\"') + '"]');
+            var existingItem = items.find(function(i) { return i.tag === r.tag; });
+            removeChipEl(r.tag, chipsEl);
+            if (existingItem) addChipEl(existingItem, chipsEl, makeImmediateRemove(r.tag, existingCb));
+          } else {
+            currentTags.delete(r.tag);
+          }
+        });
+        /* Revert checkboxes for failed tags */
+        results.filter(function(r) { return !r.ok; }).forEach(function(r) {
+          var cb = listEl.querySelector('input[value="' + r.tag.replace(/"/g,'\\"') + '"]');
+          if (cb) cb.checked = (r.action === 'remove'); /* undo the visual change */
+          if (r.action === 'add') removeChipEl(r.tag, chipsEl);
+          else addChipEl({tag: r.tag, value: TAG_TO_VALUE[r.tag] || r.tag}, chipsEl, makeImmediateRemove(r.tag, null));
+        });
+
+        pendingChanges = {};
+        updateRowDataTags(eventRow, currentTags);
+        rebuildGalaxyLine(eventRow, currentTags);
+
+        applyBtn.innerHTML = '<i class="fas fa-check me-1"></i>Applied';
+        setTimeout(function() { closePanel(); }, 900);
+      });
+    });
+
+    /* Close button — warn if there are unsaved pending changes */
+    td.querySelector('.scope-close-btn').addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (Object.keys(pendingChanges).length > 0) {
+        if (!confirm('You have unsaved scope changes. Close without applying them?')) return;
+      }
+      closePanel();
+    });
+  }
+
+  /* onRemove(chip) is called when × is clicked.
+     stopPropagation prevents the document handler from seeing the click after
+     the chip is removed from the DOM, which would otherwise close the panel. */
+  function addChipEl(item, chipsEl, onRemove) {
+    if (Array.from(chipsEl.querySelectorAll('[data-chip-tag]')).some(function(c) { return c.dataset.chipTag === item.tag; })) return;
+    var chip = document.createElement('span');
+    chip.className = 'scope-chip';
+    chip.dataset.chipTag = item.tag;
+    chip.innerHTML = '<i class="fas fa-circle-nodes fa-xs"></i>' + esc(item.value) +
+      '<span class="scope-chip-remove" title="Remove">×</span>';
+    chip.querySelector('.scope-chip-remove').addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (onRemove) onRemove(chip);
+    });
+    chipsEl.appendChild(chip);
+  }
+
+  function removeChipEl(tag, chipsEl) {
+    chipsEl.querySelectorAll('[data-chip-tag]').forEach(function(c) { if (c.dataset.chipTag === tag) c.remove(); });
+  }
+
+  function updateRowDataTags(eventRow, currentTags) {
+    eventRow.dataset.tags = JSON.stringify(Array.from(currentTags));
+  }
+
+  /* Rebuild the galaxy tag line in the event row from the current tag set */
+  function rebuildGalaxyLine(eventRow, currentTags) {
+    var galaxyLine = eventRow.querySelector('.tag-line-galaxy');
+    if (!galaxyLine) return;
+    galaxyLine.innerHTML = '';
+
+    var galaxyTags = Array.from(currentTags).filter(function(t) { return t.startsWith('misp-galaxy:'); });
+    var typeOrder = [
+      'misp-galaxy:threat-actor=',
+      'misp-galaxy:country=',
+      'misp-galaxy:target-information=',
+      'misp-galaxy:sector=',
+      'misp-galaxy:mitre-attack-pattern=',
+    ];
+    var ordered = [];
+    typeOrder.forEach(function(prefix) {
+      galaxyTags.filter(function(t) { return t.startsWith(prefix); }).forEach(function(t) { ordered.push(t); });
+    });
+    galaxyTags.filter(function(t) {
+      return !typeOrder.some(function(p) { return t.startsWith(p); });
+    }).forEach(function(t) { ordered.push(t); });
+
+    ordered.forEach(function(tag) {
+      var badge = buildGalaxyBadge(tag);
+      if (badge) galaxyLine.appendChild(badge);
+    });
+
+    /* Re-wire click-to-filter */
+    galaxyLine.querySelectorAll('[data-tag]').forEach(function(badge) {
+      badge.addEventListener('click', function(e) {
+        e.preventDefault();
+        var s = window.zsazsaCollectionState;
+        if (!s) return;
+        var t = badge.dataset.tag;
+        if (s.include.has(t)) { s.include.delete(t); } else { s.include.add(t); s.exclude.delete(t); }
+        if (window.zsazsaCollectionApply) window.zsazsaCollectionApply();
+      });
+    });
+  }
+
+  function buildGalaxyBadge(tag) {
+    var value = TAG_TO_VALUE[tag] || tag.split('=').slice(1).join('=').replace(/"/g,'').trim();
+    var cls, icon, inner;
+    if (tag.startsWith('misp-galaxy:threat-actor=')) {
+      cls = 'chip-threat-actor'; icon = 'fa-user-secret';
+      inner = '<i class="fas ' + icon + ' fa-xs me-1"></i>' + esc(value);
+    } else if (tag.startsWith('misp-galaxy:country=') || tag.startsWith('misp-galaxy:target-information=')) {
+      cls = 'chip-galaxy-geo'; icon = 'fa-globe';
+      inner = '<i class="fas ' + icon + ' fa-xs me-1"></i>' + esc(value);
+    } else if (tag.startsWith('misp-galaxy:sector=')) {
+      cls = 'chip-galaxy-geo'; icon = 'fa-building';
+      inner = '<i class="fas ' + icon + ' fa-xs me-1"></i>' + esc(value);
+    } else if (tag.startsWith('misp-galaxy:mitre-attack-pattern=')) {
+      cls = 'chip-mitre'; icon = 'fa-shield-halved';
+      var parts = value.split(' - ', 2);
+      inner = '<i class="fas ' + icon + ' fa-xs me-1"></i><span style="font-family:monospace;font-weight:700;">' + esc(parts[0]) + '</span>' + (parts[1] ? ' ' + esc(parts[1]) : '');
+    } else {
+      cls = 'chip-galaxy-generic'; icon = 'fa-circle-nodes';
+      inner = '<i class="fas ' + icon + ' fa-xs me-1"></i>' + esc(value);
+    }
+    var span = document.createElement('span');
+    span.className = 'badge tag-row-badge ' + cls;
+    span.dataset.tag = tag;
+    span.style.cssText = 'cursor:pointer;';
+    span.title = tag + ' · Click to filter';
+    span.innerHTML = inner;
+    return span;
+  }
+
+  /* Event delegation for scope buttons */
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.scope-btn');
+    if (btn) {
+      openPanel(btn, btn.dataset.uuid, btn.dataset.sourceId, btn.dataset.scopeType);
+      return;
+    }
+    if (activePanelRow && !activePanelRow.contains(e.target) && !e.target.closest('.scope-btn')) {
+      closePanel();
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && activePanelRow) closePanel();
+  });
+})();
+
+/* ── Filter presets (localStorage) ───────────────────────────────── */
+(function() {
+  var STORAGE_KEY = 'zsazsa_collection_presets';
+  var ACTIVE_PRESET_KEY = 'zsazsa_collection_active_preset';
+  var activePreset = null;
+
+  function loadPresets() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { return []; }
+  }
+  function savePresets(list) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch(e) {}
+  }
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function normaliseState(s) {
+    if (!s) return null;
+    var out = Object.assign({}, s);
+    ['include', 'exclude', 'activeSources', 'includeOrgs', 'excludeOrgs'].forEach(function(k) {
+      out[k] = Array.isArray(out[k]) ? out[k].slice().sort() : [];
+    });
+    return out;
+  }
+
+  function isSameState(a, b) {
+    return JSON.stringify(normaliseState(a)) === JSON.stringify(normaliseState(b));
+  }
+
+  function serializeState() {
+    var s = window.zsazsaCollectionState;
+    if (!s) return null;
+    var activeDateBtn = document.querySelector('.date-filter-btn.active');
+    var dateFilter = (activeDateBtn && activeDateBtn.dataset.dateFilter) || s.dateFilter || 'none';
+    return {
+      q: s.q, sortCol: s.sortCol, sortDir: s.sortDir,
+      include: Array.from(s.include), exclude: Array.from(s.exclude),
+      activeSources: Array.from(s.activeSources),
+      includeOrgs: Array.from(s.includeOrgs), excludeOrgs: Array.from(s.excludeOrgs),
+      flagFilter: s.flagFilter, dateFilter: dateFilter,
+      aiFilter: s.aiFilter, reportsFilter: s.reportsFilter,
+      reqMatchFilter: s.reqMatchFilter, vulnFilter: s.vulnFilter,
+      anyProductFilter: s.anyProductFilter, ctiPredicate: s.ctiPredicate,
+      ctiOperator: s.ctiOperator, ctiValue: s.ctiValue, hideRejected: s.hideRejected,
+      dismissedFilter: s.dismissedFilter,
+    };
+  }
+
+  function renderActivePresetIndicator() {
+    var el = document.getElementById('preset-active-indicator');
+    if (!el) return;
+    if (!activePreset || !activePreset.name) {
+      el.classList.add('d-none');
+      return;
+    }
+    var unchanged = isSameState(serializeState(), activePreset.state);
+    el.classList.remove('d-none');
+    el.classList.toggle('modified', !unchanged);
+    var nameEl = el.querySelector('.preset-name');
+    var stateEl = el.querySelector('.preset-state');
+    if (nameEl) nameEl.textContent = activePreset.name;
+    if (stateEl) stateEl.textContent = unchanged ? '' : '(modified)';
+  }
+
+  function persistActivePreset() {
+    try {
+      if (activePreset) sessionStorage.setItem(ACTIVE_PRESET_KEY, JSON.stringify(activePreset));
+      else sessionStorage.removeItem(ACTIVE_PRESET_KEY);
+    } catch(e) {}
+  }
+
+  function renderDropdown() {
+    var el = document.getElementById('preset-dropdown-content');
+    if (!el) return;
+    var list = loadPresets();
+    if (!list.length) {
+      el.innerHTML = '<p class="text-muted small mb-0 px-1 py-1">No presets saved yet.</p>';
+      return;
+    }
+    var html = '';
+    list.forEach(function(p, idx) {
+      var dt = p.savedAt ? new Date(p.savedAt).toLocaleDateString() : '';
+      html +=
+        '<div class="d-flex align-items-center gap-1 mb-1">' +
+          '<button class="btn btn-sm btn-outline-secondary flex-grow-1 text-start preset-load-btn" data-idx="' + idx + '" style="font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+            '<i class="fas fa-sliders fa-xs me-1 text-muted"></i>' + esc(p.name) +
+            (dt ? ' <span class="text-muted" style="font-size:.7rem;">· ' + dt + '</span>' : '') +
+          '</button>' +
+          '<button class="btn btn-xs btn-outline-danger preset-delete-btn" data-idx="' + idx + '" title="Delete this preset"><i class="fas fa-xmark fa-xs"></i></button>' +
+        '</div>';
+    });
+    el.innerHTML = html;
+
+    el.querySelectorAll('.preset-load-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var idx = parseInt(btn.dataset.idx, 10);
+        var preset = loadPresets()[idx];
+        if (preset && window.zsazsaRestoreFilterState) {
+          window.zsazsaRestoreFilterState(preset.state);
+          activePreset = {name: preset.name, state: normaliseState(preset.state)};
+          persistActivePreset();
+          renderActivePresetIndicator();
+          /* Close the dropdown */
+          var ddEl = document.getElementById('load-preset-btn');
+          if (ddEl && window.bootstrap) bootstrap.Dropdown.getOrCreateInstance(ddEl).hide();
+        }
+      });
+    });
+
+    el.querySelectorAll('.preset-delete-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var idx = parseInt(btn.dataset.idx, 10);
+        var list = loadPresets();
+        var removed = list[idx];
+        list.splice(idx, 1);
+        savePresets(list);
+        if (removed && activePreset && activePreset.name === removed.name && isSameState(activePreset.state, removed.state)) {
+          activePreset = null;
+          persistActivePreset();
+          renderActivePresetIndicator();
+        }
+        renderDropdown();
+      });
+    });
+  }
+
+  var saveBtn = document.getElementById('save-preset-btn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', function() {
+      var name = prompt('Preset name:');
+      if (!name || !name.trim()) return;
+      var s = serializeState();
+      if (!s) return;
+      var list = loadPresets();
+      list.push({name: name.trim(), state: s, savedAt: Date.now()});
+      savePresets(list);
+      var orig = saveBtn.innerHTML;
+      saveBtn.innerHTML = '<i class="fas fa-check" style="font-size:.75rem;"></i> Saved';
+      setTimeout(function() { saveBtn.innerHTML = orig; }, 1500);
+    });
+  }
+
+  var loadBtn = document.getElementById('load-preset-btn');
+  if (loadBtn) {
+    loadBtn.addEventListener('show.bs.dropdown', renderDropdown);
+  }
+
+  var presetClearBtn = document.getElementById('preset-clear-btn');
+  if (presetClearBtn) {
+    presetClearBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      activePreset = null;
+      persistActivePreset();
+      renderActivePresetIndicator();
+      /* Detaching a preset also drops the filters it applied, so the user is
+         back to a clean slate without a separate "Clear" click. */
+      if (typeof window.zsazsaClearAllFilters === 'function') window.zsazsaClearAllFilters();
+    });
+  }
+
+  try {
+    activePreset = JSON.parse(sessionStorage.getItem(ACTIVE_PRESET_KEY) || 'null');
+  } catch(e) {
+    activePreset = null;
+  }
+
+  /* Re-apply all filters from the active preset when the page loads (navigation
+     away and back resets the DOM to default state, so the filters must be
+     restored explicitly here, not just the indicator). */
+  if (activePreset && activePreset.state && typeof window.zsazsaRestoreFilterState === 'function') {
+    window.zsazsaRestoreFilterState(activePreset.state);
+  }
+
+  if (typeof window.zsazsaCollectionApply === 'function' && !window.zsazsaCollectionApply.__presetIndicatorWrapped) {
+    var originalApply = window.zsazsaCollectionApply;
+    var wrappedApply = function() {
+      var out = originalApply.apply(this, arguments);
+      renderActivePresetIndicator();
+      return out;
+    };
+    wrappedApply.__presetIndicatorWrapped = true;
+    window.zsazsaCollectionApply = wrappedApply;
+  }
+
+  renderActivePresetIndicator();
+})();
+</script>
+{% endblock %}

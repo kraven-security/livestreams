@@ -1,0 +1,445 @@
+"""Threat actor profile product: analyst write-ups of a threat actor combining
+the MISP threat-actor galaxy with the analyst's own investigation."""
+
+import base64
+import logging
+from datetime import datetime, timezone
+
+from flask import Blueprint, Response, flash, jsonify, redirect, render_template, request, url_for
+
+import config
+from webapp import audit, branding, misp_session, misp_store, notify_jobs
+from webapp.rate_limit import rate_limited
+from webapp.diamond import render_diamond_png
+from webapp.utils import sort_products
+from notifier import dispatcher
+
+logger = logging.getLogger(__name__)
+
+bp = Blueprint("threat_actor_profile", __name__, url_prefix="/products/threat-actor-profile")
+
+PRODUCT_NAME = "Threat actor profile"
+STATES = ["Draft", "Published"]
+
+
+def _form_data(form, tap_id=""):
+    return {
+        "tap_id": tap_id,
+        "title": (form.get("title") or "").strip(),
+        "summary": (form.get("summary") or "").strip(),
+        "threat_actors": [v.strip() for v in form.getlist("threat_actors") if v.strip()],
+        "audience": ", ".join(form.getlist("audience")),
+        "tlp": form.get("tlp", "amber"),
+        "linked_pir_uuid": (form.get("linked_pir_uuid") or "").strip(),
+        "source_reliability": (form.get("source_reliability") or "").strip(),
+        "source_credibility": (form.get("source_credibility") or "").strip(),
+        "attribution_rationale": (form.get("attribution_rationale") or "").strip(),
+        "assessment_confidence": (form.get("assessment_confidence") or "").strip(),
+        "review_date": (form.get("review_date") or "").strip(),
+        "actor_types": form.getlist("actor_types"),
+        "synonyms": (form.get("synonyms") or "").strip(),
+        "suspected_origin": (form.get("suspected_origin") or "").strip(),
+        "origin_confidence": (form.get("origin_confidence") or "").strip(),
+        "motivation": (form.get("motivation") or "").strip(),
+        "sponsorship": (form.get("sponsorship") or "").strip(),
+        "capabilities": (form.get("capabilities") or "").strip(),
+        "mode_of_operation": (form.get("mode_of_operation") or "").strip(),
+        "infrastructure": (form.get("infrastructure") or "").strip(),
+        "rec_prevention": (form.get("rec_prevention") or "").strip(),
+        "rec_detection": (form.get("rec_detection") or "").strip(),
+        "rec_response": (form.get("rec_response") or "").strip(),
+        "indicator_feeds": form.getlist("indicator_feeds"),
+        "geographic_scope": form.getlist("geographic_scope"),
+        "sectors": form.getlist("sectors"),
+        "mitre_attack_techniques": form.getlist("mitre_attack_techniques"),
+        "threat_types": form.getlist("threat_types"),
+        "time_frame": (form.get("time_frame") or "").strip(),
+        "technology": form.getlist("technology"),
+        "vendor": form.getlist("vendor"),
+        "external_references": [r.strip() for r in misp_store._split_lines(form.get("external_references")) if r.strip()],
+        "feedback_deadline": (form.get("feedback_deadline") or "").strip(),
+        "author": (form.get("author") or "").strip(),
+    }
+
+
+def _linked_feeds(tap):
+    """The indicator feeds a profile links to, skipping any that were deleted."""
+    return [f for f in (misp_store.get_indicator_feed(u) for u in tap.indicator_feeds) if f]
+
+
+def _form_context(tap=None):
+    return {
+        "tap": tap,
+        "audiences": misp_store.FIA_AUDIENCES,
+        "tlp_levels": misp_store.FIA_TLP_LEVELS,
+        "reliabilities": misp_store.FIA_RELIABILITIES,
+        "credibilities": misp_store.FIA_CREDIBILITIES,
+        "threat_actor_items": misp_store.galaxy_threat_actors(),
+        "threat_actor_types": getattr(config, "THREAT_ACTOR_TYPES", []),
+        "estimative_confidence": misp_store.ESTIMATIVE_CONFIDENCE,
+        "geo_items": misp_store.galaxy_geography(),
+        "galaxy_sectors": misp_store.galaxy_sectors(),
+        "galaxy_mitre_attack": misp_store.galaxy_mitre_attack_patterns(),
+        "pirs": misp_store.list_pirs(),
+        "feeds": misp_store.list_indicator_feeds(),
+    }
+
+
+@bp.route("/")
+def review():
+    state_filter = (request.args.get("state") or "").strip() or None
+    sort = (request.args.get("sort") or "").strip()
+    direction = (request.args.get("dir") or "asc").strip()
+    taps = misp_store.list_threat_actor_profiles(status=state_filter)
+    sort_products(taps, sort, direction)
+    return render_template(
+        "threat_actor_profile/review.html",
+        taps=taps,
+        state_filter=state_filter or "",
+        states=STATES,
+        sort=sort,
+        dir=direction,
+    )
+
+
+@bp.route("/galaxy-enrich", methods=["POST"])
+def galaxy_enrich():
+    """Return threat-actor galaxy context for the selected actors, for the
+    'Complete profile with MISP galaxy data' button to fill the form fields."""
+    actors = request.form.getlist("threat_actors")
+    data = misp_store.galaxy_enrichment(actors)
+    return jsonify({
+        "capabilities": data["capabilities"],
+        "mode_of_operation": data["mode_of_operation"],
+        "synonyms": data["synonyms"],
+        "refs": data["refs"],
+        "suspected_origin": data["suspected_origin"],
+        "motivation": data["motivation"],
+        "sponsorship": data["sponsorship"],
+        "geographic_scope": data["geographic_scope"],
+        "sectors": data["sectors"],
+        # The text itself is written server-side as a note when the profile is
+        # saved, so the page only needs to know which actors will produce one.
+        "victimology_actors": [actor for actor, _text in data["victimology"]],
+    })
+
+
+@bp.route("/recipients-preview", methods=["POST"])
+def recipients_preview():
+    """Render the recipients preview for the audience/TLP currently selected on
+    the form, before the profile is saved."""
+    tlp = request.form.get("tlp", "amber")
+    audience = ", ".join(request.form.getlist("audience"))
+    return _recipients_fragment(tlp, audience)
+
+
+@bp.route("/<string:id>/recipients")
+def recipients_fragment(id):
+    """Recipients preview for a saved profile, loaded by the review page button."""
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    return _recipients_fragment(tap.tlp, tap.audience)
+
+
+def _recipients_fragment(tlp: str, audience: str):
+    return render_template("_recipients_preview.html", product_label=PRODUCT_NAME,
+                           recipients=misp_store.recipient_preview(PRODUCT_NAME, tlp, audience),
+                           tlp_label=tlp, audience_label=audience)
+
+
+def _validate(data):
+    errors = []
+    if not data["title"]:
+        errors.append("Title is required.")
+    if not data["audience"]:
+        errors.append("Select at least one audience.")
+    return errors
+
+
+@bp.route("/new", methods=["GET", "POST"])
+def new():
+    if request.method == "POST":
+        data = _form_data(request.form)
+        errors = _validate(data)
+        if errors:
+            for e in errors:
+                flash(e, "warning")
+            return render_template("threat_actor_profile/form.html",
+                                   **_form_context(), form_values=data)
+        try:
+            # create_threat_actor_profile allocates the tap_id into data.
+            uuid = misp_store.create_threat_actor_profile(data)
+        except Exception as exc:
+            logger.exception("Could not create threat actor profile")
+            flash(f"Could not create the profile: {exc}", "warning")
+            return render_template("threat_actor_profile/form.html",
+                                   **_form_context(), form_values=data)
+        audit.record("create", "threat-actor-profile", entity_id=uuid, entity_label=data["tap_id"])
+        flash(f"{data['tap_id']} created.", "success")
+        return redirect(url_for("threat_actor_profile.detail", id=uuid))
+    return render_template("threat_actor_profile/form.html", **_form_context(), form_values=None)
+
+
+@bp.route("/<string:id>/pdf")
+def pdf(id):
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    diamond_b64 = base64.b64encode(render_diamond_png(tap)).decode("ascii")
+    pir = misp_store.get_pir(tap.linked_pir_uuid) if tap.linked_pir_uuid else None
+    linked_feeds = _linked_feeds(tap)
+    html = render_template("threat_actor_profile/pdf.html", tap=tap,
+                           css_url=branding.pdf_css_url(), brand=branding.brand(),
+                           diamond_b64=diamond_b64, pir=pir, linked_feeds=linked_feeds)
+    try:
+        import weasyprint
+        pdf_bytes = weasyprint.HTML(string=html).write_pdf()
+    except Exception as exc:
+        logger.warning("pdf: weasyprint failed for %s: %s", id, exc)
+        return f"PDF generation failed: {exc}", 500
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{tap.tap_id}.pdf"'},
+    )
+
+
+@bp.route("/<string:id>/diamond.png")
+@rate_limited("tap_diamond_png", limit=30, window_s=60)
+def diamond_png(id):
+    """Serve the Diamond Model as a PNG. Unauthenticated so notification channels
+    (e.g. a Mattermost webhook) can fetch it by image URL; it only reveals the
+    same four-node summary already shown on the profile.
+
+    Rate limited like the other route that reaches MISP without a session: each
+    call costs an event fetch and an image render."""
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    return Response(render_diamond_png(tap), mimetype="image/png")
+
+
+@bp.route("/<string:id>")
+def detail(id):
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    recipients = misp_store.recipient_preview(PRODUCT_NAME, tap.tlp, tap.audience)
+    pir = misp_store.get_pir(tap.linked_pir_uuid) if tap.linked_pir_uuid else None
+    feedback = misp_store.list_product_feedback(tap.uuid)
+    linked_feeds = _linked_feeds(tap)
+    return render_template("threat_actor_profile/detail.html",
+                           tap=tap, recipients=recipients, pir=pir, feedback=feedback,
+                           linked_feeds=linked_feeds,
+                           can_publish=misp_session.current_user_can_publish())
+
+
+@bp.route("/<string:id>/edit", methods=["GET", "POST"])
+def edit(id):
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    if tap.status == "Published":
+        flash("Published profiles cannot be edited.", "warning")
+        return redirect(url_for("threat_actor_profile.detail", id=id))
+    if request.method == "POST":
+        data = _form_data(request.form, tap_id=tap.tap_id)
+        errors = _validate(data)
+        if errors:
+            for e in errors:
+                flash(e, "warning")
+            return render_template("threat_actor_profile/form.html",
+                                   **_form_context(tap), form_values=data)
+        try:
+            misp_store.update_threat_actor_profile(id, data)
+        except Exception as exc:
+            logger.exception("Could not update threat actor profile %s", id)
+            flash(f"Could not update the profile: {exc}", "warning")
+            return render_template("threat_actor_profile/form.html",
+                                   **_form_context(tap), form_values=data)
+        audit.record("update", "threat-actor-profile", entity_id=id, entity_label=tap.tap_id)
+        flash(f"{tap.tap_id} updated.", "success")
+        return redirect(url_for("threat_actor_profile.detail", id=id))
+    return render_template("threat_actor_profile/form.html", **_form_context(tap), form_values=None)
+
+
+@bp.route("/<string:id>/publish", methods=["POST"])
+def publish(id):
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    if not misp_session.current_user_can_publish():
+        flash(misp_session.publish_denied_message(), "warning")
+        return redirect(url_for("threat_actor_profile.detail", id=id))
+    try:
+        misp_store.publish_threat_actor_profile(id)
+        audit.record("update", "threat-actor-profile", entity_id=id, entity_label=tap.tap_id, details="published")
+        flash(f"{tap.tap_id} published.", "success")
+    except Exception as exc:
+        flash(f"Could not publish: {exc}", "warning")
+    return redirect(url_for("threat_actor_profile.detail", id=id))
+
+
+@bp.route("/<string:id>/notify", methods=["POST"])
+def notify(id):
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    if tap.status != "Published":
+        flash("Publish the profile before notifying recipients.", "warning")
+        return redirect(url_for("threat_actor_profile.detail", id=id))
+    # Notifying reaches the same recipients as publishing, so it takes the same right.
+    if not misp_session.current_user_can_publish():
+        flash(misp_session.publish_denied_message("notify recipients"), "warning")
+        return redirect(url_for("threat_actor_profile.detail", id=id))
+    diamond_url = url_for("threat_actor_profile.diamond_png", id=id, _external=True)
+    # Resolved here rather than on the job thread: only the request knows the
+    # app's external address.
+    preview_url = url_for("threat_actor_profile.detail", id=id, _external=True)
+
+    def deliver(log):
+        profile = misp_store.get_threat_actor_profile(id)
+        if profile is None:
+            return False, "the profile could not be loaded"
+        # Deliver to the green set: subscribed, TLP cleared, audience match.
+        green = {r["uuid"] for r in misp_store.recipient_preview(
+            PRODUCT_NAME, profile.tlp, profile.audience)
+            if r["status"] == "green" and r.get("uuid")}
+        recipients = [s for s in misp_store.list_stakeholders() if s.uuid in green]
+        markdown = _markdown(profile) + _linked_feeds_markdown(profile)
+        # Last, so it sits below any embedded feed rather than in front of one.
+        markdown += f"\n[Open profile]({preview_url})\n"
+        log(f"{len(recipients)} eligible recipient(s).")
+        summary = dispatcher.send_threat_actor_profile(
+            profile, markdown, recipients,
+            diamond_png=render_diamond_png(profile), diamond_url=diamond_url)
+        ok, detail = dispatcher.delivery_outcome(summary)
+        log(f"Channels: {detail}.")
+        return ok, detail
+
+    notify_jobs.start(
+        "notify-tap", f"{tap.tap_id} delivery", deliver,
+        entity_type="threat-actor-profile", entity_id=id, entity_label=tap.tap_id,
+        user=misp_session.current_user_email(),
+    )
+    flash(f"{tap.tap_id} delivery started; the job badge reports the result.", "info")
+    return redirect(url_for("threat_actor_profile.detail", id=id))
+
+
+@bp.route("/<string:id>/delete", methods=["POST"])
+def delete(id):
+    tap = misp_store.get_threat_actor_profile(id)
+    label = tap.tap_id if tap else id
+    if tap and tap.status == "Published":
+        flash("Published profiles cannot be deleted.", "warning")
+        return redirect(url_for("threat_actor_profile.detail", id=id))
+    try:
+        misp_store.delete_threat_actor_profile(id)
+        audit.record("delete", "threat-actor-profile", entity_id=id, entity_label=label)
+        flash(f"{label} deleted.", "info")
+    except Exception as exc:
+        flash(f"Could not delete: {exc}", "warning")
+    return redirect(url_for("threat_actor_profile.review"))
+
+
+@bp.route("/<string:id>/feedback", methods=["POST"])
+def add_feedback(id):
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    author = request.form.get("author", "").strip()
+    rating = request.form.get("rating", "").strip()
+    comment = request.form.get("comment", "").strip()
+    try:
+        misp_store.add_product_feedback(tap.uuid, author, rating, comment)
+        audit.record("create", "threat-actor-profile-feedback", entity_id=id, entity_label=tap.tap_id)
+        flash("Feedback recorded.", "success")
+    except Exception as exc:
+        flash(f"Could not record feedback: {exc}", "warning")
+    return redirect(url_for("threat_actor_profile.detail", id=id))
+
+
+@bp.route("/<string:id>/notes", methods=["POST"])
+def note_add(id):
+    tap = misp_store.get_threat_actor_profile(id)
+    if tap is None:
+        return "Threat actor profile not found", 404
+    title = (request.form.get("note_title") or "").strip()
+    content = (request.form.get("note_content") or "").strip()
+    if not title:
+        flash("Note title is required.", "warning")
+        return redirect(url_for("threat_actor_profile.edit", id=id))
+    try:
+        misp_store.add_rfi_note(id, title, content)
+        audit.record("update", "threat-actor-profile", entity_id=id, entity_label=tap.tap_id)
+        flash(f"Note '{title}' added.", "success")
+    except Exception as exc:
+        flash(f"Could not add note: {exc}", "warning")
+    return redirect(url_for("threat_actor_profile.edit", id=id))
+
+
+@bp.route("/<string:id>/notes/<string:report_id>/delete", methods=["POST"])
+def note_delete(id, report_id):
+    tap = misp_store.get_threat_actor_profile(id)
+    label = tap.tap_id if tap else id
+    try:
+        misp_store.delete_rfi_note(report_id)
+        audit.record("update", "threat-actor-profile", entity_id=id, entity_label=label)
+        flash("Note deleted.", "success")
+    except Exception as exc:
+        flash(f"Could not delete note: {exc}", "warning")
+    return redirect(url_for("threat_actor_profile.edit", id=id))
+
+
+def _markdown(tap):
+    """Build the notification body for a threat actor profile."""
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines = [f"# {tap.title}", "", f"*{tap.tap_id} - TLP:{tap.tlp.upper()} - as of {now}*", ""]
+    if tap.threat_actors:
+        lines += ["**Threat actors:** " + ", ".join(tap.threat_actors), ""]
+    if tap.summary:
+        lines += ["## Summary", "", tap.summary, ""]
+    if tap.attribution_rationale:
+        lines += ["## Attribution", "", tap.attribution_rationale, ""]
+    # The part a reader is meant to act on, and the only route by which a
+    # detection rule attached to the profile reaches them.
+    written = [(label, value) for label, value in
+               (("Prevention", tap.rec_prevention),
+                ("Detection", tap.rec_detection),
+                ("Response", tap.rec_response)) if value]
+    if written:
+        lines += ["## Recommendations", ""]
+        for label, value in written:
+            lines += [f"**{label}:**", "", value, ""]
+    return "\n".join(lines)
+
+
+def _linked_feeds_markdown(tap):
+    """Embed each linked indicator feed (name, description, CSV) into the product
+    so it travels inside the notification rather than as a separate attachment.
+
+    A feed runs with its own limit here, as it does everywhere else, so one that
+    matches more than it shows says so rather than arriving short. A feed that
+    could not be read says that too: the stakeholder would otherwise read an
+    outage as a feed with nothing in it."""
+    lines = []
+    for feed in _linked_feeds(tap):
+        lines += ["", f"## Indicator feed: {feed.name}", ""]
+        if feed.description:
+            lines += [feed.description, ""]
+        query = feed.query or {}
+        try:
+            rows = misp_store.search_indicators(query, server_ids=query.get("servers"))
+        except Exception as exc:
+            logger.warning("Could not read feed %s for TAP %s: %s", feed.feed_id, tap.tap_id, exc)
+            lines += ["*This feed could not be read from MISP when the product was made.*", ""]
+            continue
+        # An empty result still renders a CSV header row, which reads as a feed
+        # whose columns are all that is left of it.
+        body = misp_store.indicator_csv_text(rows).strip() if rows else "(no indicators)"
+        lines += ["```", body, "```", ""]
+        if len(rows) >= misp_store.indicator_limit(query):
+            lines += [f"*The feed's limit of {len(rows)} indicators was reached, "
+                      f"so more may match than are listed here.*", ""]
+    return "\n".join(lines)

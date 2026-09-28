@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% from "_sort_header.html" import sort_th %}
+
+{% block title %}Threat actor profiles | zsazsa CTI{% endblock %}
+{% block page_title %}Threat actor profiles{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('threat_actor_profile.new') }}" class="btn btn-sm btn-primary">
+  <i class="fas fa-plus me-1"></i> New profile
+</a>
+<a href="{{ url_for('export.threat_actor_profiles') }}" class="btn btn-sm btn-outline-secondary ms-2"
+   title="Export as Markdown">
+  <i class="fas fa-download me-1"></i> Export
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card content-card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label small mb-1">State</label>
+        <select name="state" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">All states</option>
+          {% for s in states %}
+          <option value="{{ s }}" {{ 'selected' if state_filter == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if state_filter %}
+      <div class="col-auto">
+        <a href="{{ url_for('threat_actor_profile.review') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+      </div>
+      {% endif %}
+      <div class="col-auto ms-auto text-muted small">{{ taps | length }} profile{{ 's' if taps|length != 1 }}</div>
+    </form>
+  </div>
+</div>
+
+<div class="card content-card">
+  <div class="card-body p-0">
+    {% if taps %}
+    <table class="table table-hover zsazsa-table mb-0">
+      <thead>
+        <tr>
+          {{ sort_th('ID', 'id', sort, dir, 'threat_actor_profile.review', state_filter, '110px') }}
+          {{ sort_th('Title', 'title', sort, dir, 'threat_actor_profile.review', state_filter) }}
+          <th>TLP</th>
+          {{ sort_th('State', 'state', sort, dir, 'threat_actor_profile.review', state_filter) }}
+          {{ sort_th('Published', 'date', sort, dir, 'threat_actor_profile.review', state_filter) }}
+          <th>Author</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in taps %}
+        <tr>
+          <td>
+            <a href="{{ url_for('threat_actor_profile.detail', id=t.uuid) }}" class="text-decoration-none">
+              <span class="req-id-badge">{{ t.tap_id }}</span>
+            </a>
+          </td>
+          <td>
+            {{ t.title or '(untitled)' }}
+            {% if t.threat_actors %}
+            <div class="mt-1">
+              {% for a in t.threat_actors %}
+              <span class="badge chip-source" style="font-size:.63rem;">{{ a }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </td>
+          <td><span class="tlp-badge tlp-{{ t.tlp | slug }}">TLP:{{ t.tlp | upper }}</span></td>
+          <td>
+            {% if t.status == 'Published' %}<span class="badge bg-success">Published</span>
+            {% else %}<span class="badge bg-secondary">Draft</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap;">{{ t.published_at.strftime('%Y-%m-%d') if t.published_at else '-' }}</td>
+          <td>{{ t.author or '-' }}</td>
+          <td class="text-end">
+            <div class="d-inline-flex flex-nowrap align-items-center justify-content-end gap-2">
+              <span class="d-inline-flex flex-nowrap gap-1">
+                <button type="button" class="btn btn-xs btn-outline-secondary preview-toggle-btn"
+                        data-target="tap-preview-{{ t.uuid }}" title="Preview">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button type="button" class="btn btn-xs btn-outline-secondary feedback-btn"
+                        data-uuid="{{ t.uuid }}" data-tap-id="{{ t.tap_id }}"
+                        data-bs-toggle="modal" data-bs-target="#feedback-modal" title="Give feedback">
+                  <i class="fas fa-comment-dots"></i>
+                </button>
+                {% if t.status == 'Published' %}
+                <a href="{{ url_for('threat_actor_profile.pdf', id=t.uuid) }}" class="btn btn-xs btn-outline-secondary" title="Download PDF">
+                  <i class="fas fa-file-pdf"></i>
+                </a>
+                <form method="post" action="{{ url_for('threat_actor_profile.notify', id=t.uuid) }}"
+                      class="d-inline" onsubmit="return confirm('Resend {{ t.tap_id }} to subscribed stakeholders?')">
+                  <button type="submit" class="btn btn-xs btn-outline-primary" title="Resend to recipients">
+                    <i class="fas fa-paper-plane"></i>
+                  </button>
+                </form>
+                {% else %}
+                <span class="btn btn-xs btn-outline-secondary btn-ghost" aria-hidden="true"><i class="fas fa-file-pdf"></i></span>
+                <span class="btn btn-xs btn-outline-primary btn-ghost" aria-hidden="true"><i class="fas fa-paper-plane"></i></span>
+                {% endif %}
+              </span>
+              <span class="vr"></span>
+              <span class="d-inline-flex flex-nowrap gap-1">
+                {% if t.status == 'Published' %}
+                <span class="btn btn-xs btn-outline-secondary btn-ghost" aria-hidden="true"><i class="fas fa-pen"></i></span>
+                <span class="btn btn-xs btn-outline-danger btn-ghost" aria-hidden="true"><i class="fas fa-trash"></i></span>
+                {% else %}
+                <a href="{{ url_for('threat_actor_profile.edit', id=t.uuid) }}" class="btn btn-xs btn-outline-secondary" title="Edit">
+                  <i class="fas fa-pen"></i>
+                </a>
+                <form method="post" action="{{ url_for('threat_actor_profile.delete', id=t.uuid) }}"
+                      class="d-inline" onsubmit="return confirm('Delete {{ t.tap_id }}?')">
+                  <button class="btn btn-xs btn-outline-danger" title="Delete">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </span>
+            </div>
+          </td>
+        </tr>
+
+        {# ── Expandable preview row ── #}
+        <tr id="tap-preview-{{ t.uuid }}" style="display:none;">
+          <td colspan="7" class="p-0">
+            <div style="background:var(--surface-muted);border-top:1px solid var(--border-light);padding:1rem 1.25rem;">
+              <div class="d-flex align-items-center gap-3 mb-3">
+                <span class="req-id-badge">{{ t.tap_id }}</span>
+                <span class="tlp-badge tlp-{{ t.tlp | slug }}">TLP:{{ t.tlp | upper }}</span>
+                {% if t.audience %}<span class="text-muted small">{{ t.audience }}</span>{% endif %}
+                {% if t.author %}<span class="text-muted small">by {{ t.author }}</span>{% endif %}
+                {% if t.assessment_confidence %}<span class="text-muted small">· {{ t.assessment_confidence | capitalize }} confidence</span>{% endif %}
+                <button type="button" class="btn btn-xs btn-outline-secondary ms-auto"
+                        data-recipients-url="{{ url_for('threat_actor_profile.recipients_fragment', id=t.uuid) }}"
+                        title="Preview recipients">
+                  <i class="fas fa-users me-1"></i>Recipients
+                </button>
+              </div>
+              {% if t.summary %}
+              <div class="mb-3">
+                <div class="fw-semibold small text-uppercase text-muted mb-1" style="letter-spacing:.05em;">Summary</div>
+                <div class="report-md-body" style="font-size:.88rem;" data-md="{{ t.summary | e }}"></div>
+              </div>
+              {% endif %}
+              {% if t.actor_types or t.suspected_origin or t.motivation %}
+              <p class="mb-2" style="font-size:.82rem;">
+                {% if t.actor_types %}<strong>Type:</strong> {{ t.actor_types | join(', ') }}{% endif %}
+                {% if t.suspected_origin %} · <strong>Origin:</strong> {{ t.suspected_origin }}{% endif %}
+                {% if t.motivation %} · <strong>Motivation:</strong> {{ t.motivation }}{% endif %}
+              </p>
+              {% endif %}
+              {% if t.geographic_scope or t.sectors or t.mitre_attack_techniques %}
+              <div class="d-flex flex-wrap gap-1">
+                {% for x in t.geographic_scope %}<span class="badge chip-source">{{ x }}</span>{% endfor %}
+                {% for x in t.sectors %}<span class="badge chip-source">{{ x }}</span>{% endfor %}
+                {% for x in t.mitre_attack_techniques %}<span class="badge chip-source">{{ x }}</span>{% endfor %}
+              </div>
+              {% endif %}
+              <div class="mt-3">
+                <a href="{{ url_for('threat_actor_profile.detail', id=t.uuid) }}" class="btn btn-sm btn-outline-primary">Open full profile</a>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="p-4 text-center text-muted">
+      No threat actor profiles yet. <a href="{{ url_for('threat_actor_profile.new') }}">Create the first one</a>.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Inline feedback modal ── #}
+<div class="modal fade" id="feedback-modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">
+          <i class="fas fa-comment-dots me-2"></i>Feedback - <span id="feedback-product-id"></span>
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="feedback-form" method="post" action="">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small">Your name <span class="text-muted">(optional)</span></label>
+            <input type="text" name="author" class="form-control form-control-sm" placeholder="Name">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Rating</label>
+            <select name="rating" class="form-select form-select-sm">
+              <option value="">- select rating -</option>
+              <option value="Very useful">Very useful</option>
+              <option value="Useful">Useful</option>
+              <option value="Somewhat useful">Somewhat useful</option>
+              <option value="Not useful">Not useful</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Comments or suggestions</label>
+            <textarea name="comment" class="form-control form-control-sm" rows="4"
+                      placeholder="New campaigns, TTPs, infrastructure, corrections…"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-paper-plane me-1"></i>Submit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% include "_recipients_modal.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+(function() {
+  marked.setOptions({ breaks: true, gfm: true });
+
+  document.querySelectorAll('.preview-toggle-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = document.getElementById(btn.getAttribute('data-target'));
+      if (!row) return;
+      var open = row.style.display !== 'none';
+      row.style.display = open ? 'none' : '';
+      var icon = btn.querySelector('i');
+      if (icon) icon.className = open ? 'fas fa-eye' : 'fas fa-eye-slash';
+      if (!open) {
+        row.querySelectorAll('.report-md-body[data-md]').forEach(function(el) {
+          var raw = el.getAttribute('data-md') || '';
+          el.innerHTML = raw.trim() ? DOMPurify.sanitize(marked.parse(raw)) : '';
+          el.removeAttribute('data-md');
+        });
+      }
+    });
+  });
+
+  var feedbackModal = document.getElementById('feedback-modal');
+  if (feedbackModal) {
+    feedbackModal.addEventListener('show.bs.modal', function(e) {
+      var trigger = e.relatedTarget;
+      if (!trigger) return;
+      var uuid = trigger.getAttribute('data-uuid');
+      document.getElementById('feedback-product-id').textContent = trigger.getAttribute('data-tap-id') || '';
+      document.getElementById('feedback-form').action = '/products/threat-actor-profile/' + uuid + '/feedback';
+    });
+    feedbackModal.addEventListener('hidden.bs.modal', function() {
+      feedbackModal.querySelector('form').reset();
+    });
+  }
+})();
+</script>
+{% endblock %}

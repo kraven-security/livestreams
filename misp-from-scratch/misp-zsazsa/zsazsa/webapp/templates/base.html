@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ ui_theme }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}zsazsa CTI{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <script>const SCRIPT_ROOT = {{ request.script_root | tojson }};</script>
+  <script>
+  // Read a JSON answer from one of our own endpoints. A slow request, an LLM
+  // call above all, can come back as an HTML page instead: an Apache timeout,
+  // a Flask error page, a CSRF 403, or the MISP login page after the session
+  // expired. response.json() then throws "Unexpected token '<'", which tells an
+  // analyst nothing, so say what actually happened.
+  function zsazsaReadJson(response) {
+    var type = response.headers.get('content-type') || '';
+    if (type.indexOf('application/json') !== -1) return response.json();
+    if (response.redirected || response.status === 403) {
+      throw new Error('your session has expired. Reload the page and sign in again.');
+    }
+    if (response.status >= 502 && response.status <= 504) {
+      throw new Error('the server did not answer in time (HTTP ' + response.status
+        + '). The request may still be running, retry in a moment.');
+    }
+    throw new Error('the server answered with a page instead of data (HTTP ' + response.status
+      + '). Check the application log for details.');
+  }
+  // Reason for a rejected request, without the "Error:" prefix the browser adds.
+  function zsazsaErrorText(err) {
+    return (err && err.message) ? err.message : String(err);
+  }
+  </script>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  {# Versioned so a released style change reaches browsers that still hold the
+     previous stylesheet in cache. #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ app_version }}">
+  {# Page-specific head assets, e.g. the Rulezet search modal
+     (_rulezet_assets.html), so pages that do not use them do not load them.
+     The Detection engineering request wizard also opens that modal; until it
+     includes the assets itself it gets them here. #}
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+
+{% set stakeholders_section_active = request.blueprint in ('stakeholders', 'community') and request.endpoint != 'stakeholders.matrix' %}
+{% set requirements_section_active = (request.endpoint and request.endpoint.startswith('requirements.')) or request.blueprint == 'rfi' %}
+{% set products_section_active = request.blueprint in ('data_collection', 'daily_briefing', 'threat_landscape', 'flash_intel', 'vea', 'products', 'indicator_feed', 'threat_actor_profile') %}
+{% set reporting_section_active = request.blueprint == 'pipeline' or request.endpoint in ('stats.index', 'stats.scope', 'logs.index', 'stakeholders.matrix') %}
+{% set settings_section_active = request.endpoint == 'config_page.index' or request.blueprint == 'collection_sources' %}
+
+<!-- Top navigation (UiBeta theme) -->
+<nav id="topnav" class="navbar navbar-expand-lg">
+  <a href="{{ url_for('dashboard.index') }}" class="topnav-brand">
+    <span class="brand-icon">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+      </svg>
+    </span>
+    <span class="brand-name">zsazsa <span class="brand-sub">CTI</span></span>
+  </a>
+  <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+          data-bs-target="#topnavCollapse" aria-controls="topnavCollapse"
+          aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="topnavCollapse">
+    <ul class="navbar-nav">
+      <li class="nav-item">
+        <a href="{{ url_for('dashboard.index') }}" class="topnav-link {{ 'active' if request.endpoint == 'dashboard.index' }}">
+          <i class="fas fa-gauge-high fa-fw"></i> Dashboard
+        </a>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+           class="topnav-link dropdown-toggle {{ 'active' if stakeholders_section_active }}">
+          <i class="fas fa-people-group fa-fw"></i> Stakeholders
+        </a>
+        <ul class="dropdown-menu topnav-dropdown-menu">
+          <li><a href="{{ url_for('stakeholders.list') }}" class="dropdown-item {{ 'active' if request.blueprint == 'stakeholders' and request.endpoint != 'stakeholders.matrix' }}"><i class="fas fa-people-group fa-fw"></i> Stakeholders</a></li>
+          <li><a href="{{ url_for('community.organisations') }}" class="dropdown-item {{ 'active' if request.endpoint == 'community.organisations' }}"><i class="fas fa-building fa-fw"></i> Organisations</a></li>
+          <li><a href="{{ url_for('community.users') }}" class="dropdown-item {{ 'active' if request.endpoint == 'community.users' }}"><i class="fas fa-user fa-fw"></i> Users</a></li>
+          <li><a href="{{ url_for('community.roles') }}" class="dropdown-item {{ 'active' if request.endpoint == 'community.roles' }}"><i class="fas fa-shield-halved fa-fw"></i> Roles</a></li>
+        </ul>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+           class="topnav-link dropdown-toggle {{ 'active' if requirements_section_active }}">
+          <i class="fas fa-clipboard-list fa-fw"></i> Requirements
+        </a>
+        <ul class="dropdown-menu topnav-dropdown-menu">
+          <li><a href="{{ url_for('requirements.pir_list') }}" class="dropdown-item {{ 'active' if request.endpoint and 'pir' in request.endpoint }}"><i class="fas fa-star fa-fw"></i> PIRs <span class="sidebar-hint">Priority</span></a></li>
+          <li><a href="{{ url_for('requirements.gir_list') }}" class="dropdown-item {{ 'active' if request.endpoint and 'gir' in request.endpoint }}"><i class="fas fa-list-check fa-fw"></i> GIRs <span class="sidebar-hint">General</span></a></li>
+          <li><a href="{{ url_for('rfi.rfi_list') }}" class="dropdown-item {{ 'active' if request.blueprint == 'rfi' }}"><i class="fas fa-circle-question fa-fw"></i> RFIs <span class="sidebar-hint">Requests</span></a></li>
+        </ul>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+           class="topnav-link dropdown-toggle {{ 'active' if products_section_active }}">
+          <i class="fas fa-boxes-stacked fa-fw"></i> Products
+        </a>
+        <ul class="dropdown-menu topnav-dropdown-menu">
+          <li><a href="{{ url_for('data_collection.index') }}" class="dropdown-item {{ 'active' if request.blueprint == 'data_collection' }}"><i class="fas fa-database fa-fw"></i> Data collection</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a href="{{ url_for('daily_briefing.list_briefings') }}" class="dropdown-item {{ 'active' if request.blueprint == 'daily_briefing' }}"><i class="fas fa-newspaper fa-fw"></i> Daily briefing</a></li>
+          <li><a href="{{ url_for('threat_landscape.review') }}" class="dropdown-item {{ 'active' if request.blueprint == 'threat_landscape' }}"><i class="fas fa-globe fa-fw"></i> Threat landscape</a></li>
+          <li><a href="{{ url_for('flash_intel.review') }}" class="dropdown-item {{ 'active' if request.blueprint == 'flash_intel' }}"><i class="fas fa-bolt fa-fw"></i> Flash intel alert</a></li>
+          <li><a href="{{ url_for('vea.review') }}" class="dropdown-item {{ 'active' if request.blueprint == 'vea' }}"><i class="fas fa-bug fa-fw"></i> Vuln advisories</a></li>
+          <li><a href="{{ url_for('threat_actor_profile.review') }}" class="dropdown-item {{ 'active' if request.blueprint == 'threat_actor_profile' }}"><i class="fas fa-user-secret fa-fw"></i> Threat actor profile</a></li>
+          <li><a href="{{ url_for('indicator_feed.index') }}" class="dropdown-item {{ 'active' if request.blueprint == 'indicator_feed' }}"><i class="fas fa-satellite-dish fa-fw"></i> Indicator feed</a></li>
+          <li><a href="{{ url_for('detection_eng.review') }}" class="dropdown-item {{ 'active' if request.blueprint == 'detection_eng' }}"><i class="fas fa-crosshairs fa-fw"></i> Detection eng. requests</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a href="{{ url_for('products.index') }}" class="dropdown-item {{ 'active' if request.blueprint == 'products' }}"><i class="fas fa-cubes fa-fw"></i> All products</a></li>
+        </ul>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+           class="topnav-link dropdown-toggle {{ 'active' if reporting_section_active }}">
+          <i class="fas fa-chart-line fa-fw"></i> Reporting
+        </a>
+        <ul class="dropdown-menu topnav-dropdown-menu">
+          <li><a href="{{ url_for('stats.index') }}" class="dropdown-item {{ 'active' if request.endpoint == 'stats.index' }}"><i class="fas fa-chart-bar fa-fw"></i> Statistics</a></li>
+          <li><a href="{{ url_for('stats.scope') }}" class="dropdown-item {{ 'active' if request.endpoint == 'stats.scope' }}"><i class="fas fa-crosshairs fa-fw"></i> Scope stats</a></li>
+          <li><a href="{{ url_for('pipeline.index') }}" class="dropdown-item {{ 'active' if request.blueprint == 'pipeline' }}"><i class="fas fa-satellite-dish fa-fw"></i> Pipeline</a></li>
+          <li><a href="{{ url_for('logs.index') }}" class="dropdown-item {{ 'active' if request.endpoint == 'logs.index' }}"><i class="fas fa-scroll fa-fw"></i> Logs</a></li>
+          <li><a href="{{ url_for('stakeholders.matrix') }}" class="dropdown-item {{ 'active' if request.endpoint == 'stakeholders.matrix' }}"><i class="fas fa-table-cells fa-fw"></i> Stakeholder matrix</a></li>
+        </ul>
+      </li>
+
+      <li class="nav-item dropdown">
+        <a href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+           class="topnav-link dropdown-toggle {{ 'active' if settings_section_active }}">
+          <i class="fas fa-sliders fa-fw"></i> Settings
+        </a>
+        <ul class="dropdown-menu topnav-dropdown-menu">
+          <li><a href="{{ url_for('config_page.index') }}" class="dropdown-item {{ 'active' if request.endpoint == 'config_page.index' }}"><i class="fas fa-sliders fa-fw"></i> Configuration</a></li>
+          <li><a href="{{ url_for('collection_sources.index') }}" class="dropdown-item {{ 'active' if request.blueprint == 'collection_sources' }}"><i class="fas fa-satellite-dish fa-fw"></i> Collection sources</a></li>
+        </ul>
+      </li>
+    </ul>
+  </div>
+
+  <div class="topnav-right">
+    <button type="button" class="job-badge d-none me-2" data-bs-toggle="modal" data-bs-target="#jobs-modal">
+      <span class="job-badge-icon"></span><span class="job-badge-text"></span>
+    </button>
+    <a class="misp-status-badge" title="Checking MISP connection…"
+       href="{{ self.misp_object_url() }}" target="_blank" rel="noopener">
+      <img src="{{ url_for('static', filename='misp-logo.png') }}" alt="MISP" class="misp-status-logo">
+      <span class="misp-status-icon misp-status-checking">
+        <i class="fas fa-circle-notch fa-spin"></i>
+      </span>
+    </a>
+    <button type="button" class="btn btn-xs btn-link p-0 admiralty-ref-btn"
+            data-bs-toggle="modal" data-bs-target="#admiralty-modal"
+            title="Intelligence Reference">
+      <i class="fas fa-star-half-stroke"></i>
+    </button>
+    <span class="topbar-user"><i class="fas fa-circle-user fa-fw"></i> {{ current_user_email }}</span>
+  </div>
+</nav>
+
+<div class="layout-wrapper">
+
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <a href="{{ url_for('dashboard.index') }}" class="sidebar-brand">
+      <span class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+        </svg>
+      </span>
+      <span class="brand-name">zsazsa <span class="brand-sub">CTI</span></span>
+    </a>
+
+    <div class="sidebar-section-label">Overview</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint == 'dashboard.index' }}">
+          <i class="fas fa-gauge-high fa-fw"></i> Dashboard
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-label">Stakeholders</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('stakeholders.list') }}" class="{{ 'active' if request.blueprint == 'stakeholders' and request.endpoint != 'stakeholders.matrix' }}">
+          <span class="misp-nav-icon"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M8 8.25A4.25 4.25 0 0 1 12.25 4h15.5A4.25 4.25 0 0 1 32 8.25V19h3.75A4.25 4.25 0 0 1 40 23.25v19.5c0 .69-.56 1.25-1.25 1.25H34v-6.75A2.25 2.25 0 0 0 31.75 35h-15.5A2.25 2.25 0 0 0 14 37.25V44H9.25C8.56 44 8 43.44 8 42.75zM16.5 44h6.25v-6.5H16.5zm8.75 0h6.25v-6.5h-6.25zM18 14a2 2 0 1 0-4 0a2 2 0 0 0 4 0m-2 9a2 2 0 1 0 0-4a2 2 0 0 0 0 4m2 5a2 2 0 1 0-4 0a2 2 0 0 0 4 0m6-12a2 2 0 1 0 0-4a2 2 0 0 0 0 4m2 5a2 2 0 1 0-4 0a2 2 0 0 0 4 0m-2 9a2 2 0 1 0 0-4a2 2 0 0 0 0 4m10-2a2 2 0 1 0-4 0a2 2 0 0 0 4 0"/></svg></span> Stakeholders
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('community.organisations') }}" class="{{ 'active' if request.endpoint == 'community.organisations' }}">
+          <span class="misp-nav-icon"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M8 8.25A4.25 4.25 0 0 1 12.25 4h15.5A4.25 4.25 0 0 1 32 8.25V19h3.75A4.25 4.25 0 0 1 40 23.25v19.5c0 .69-.56 1.25-1.25 1.25H34v-6.75A2.25 2.25 0 0 0 31.75 35h-15.5A2.25 2.25 0 0 0 14 37.25V44H9.25C8.56 44 8 43.44 8 42.75zM16.5 44h6.25v-6.5H16.5zm8.75 0h6.25v-6.5h-6.25zM18 14a2 2 0 1 0-4 0a2 2 0 0 0 4 0m-2 9a2 2 0 1 0 0-4a2 2 0 0 0 0 4m2 5a2 2 0 1 0-4 0a2 2 0 0 0 4 0m6-12a2 2 0 1 0 0-4a2 2 0 0 0 0 4m2 5a2 2 0 1 0-4 0a2 2 0 0 0 4 0m-2 9a2 2 0 1 0 0-4a2 2 0 0 0 0 4m10-2a2 2 0 1 0-4 0a2 2 0 0 0 4 0"/></svg></span> Organisations
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('community.users') }}" class="{{ 'active' if request.endpoint == 'community.users' }}">
+          <span class="misp-nav-icon"><svg viewBox="0 0 640 640" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M320 312c66.3 0 120-53.7 120-120S386.3 72 320 72s-120 53.7-120 120s53.7 120 120 120m-29.7 56C191.8 368 112 447.8 112 546.3c0 16.4 13.3 29.7 29.7 29.7h356.6c16.4 0 29.7-13.3 29.7-29.7c0-98.5-79.8-178.3-178.3-178.3z"/></svg></span> Users
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('community.roles') }}" class="{{ 'active' if request.endpoint == 'community.roles' }}">
+          <i class="fas fa-shield-halved fa-fw"></i> Roles
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-label">Requirements</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('requirements.pir_list') }}" class="{{ 'active' if request.endpoint and 'pir' in request.endpoint }}">
+          <i class="fas fa-star fa-fw"></i> PIRs
+          <span class="sidebar-hint">Priority</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('requirements.gir_list') }}" class="{{ 'active' if request.endpoint and 'gir' in request.endpoint }}">
+          <i class="fas fa-list-check fa-fw"></i> GIRs
+          <span class="sidebar-hint">General</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('rfi.rfi_list') }}" class="{{ 'active' if request.blueprint == 'rfi' }}">
+          <i class="fas fa-circle-question fa-fw"></i> RFIs
+          <span class="sidebar-hint">Requests</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-label">Products</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('data_collection.index') }}" class="{{ 'active' if request.blueprint == 'data_collection' }}">
+          <span class="misp-nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 9a3 3 0 0 0-3 3a3 3 0 0 0 3 3a3 3 0 0 0 3-3a3 3 0 0 0-3-3m0 8a5 5 0 0 1-5-5a5 5 0 0 1 5-5a5 5 0 0 1 5 5a5 5 0 0 1-5 5m0-12.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5"/></svg></span> Data collection
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('daily_briefing.list_briefings') }}" class="{{ 'active' if request.blueprint == 'daily_briefing' }}">
+          <i class="fas fa-newspaper fa-fw"></i> Daily briefing
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('threat_landscape.review') }}" class="{{ 'active' if request.blueprint == 'threat_landscape' }}">
+          <i class="fas fa-globe fa-fw"></i> Threat landscape
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('flash_intel.review') }}" class="{{ 'active' if request.blueprint == 'flash_intel' }}">
+          <i class="fas fa-bolt fa-fw"></i> Flash intel alert
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('vea.review') }}" class="{{ 'active' if request.blueprint == 'vea' }}">
+          <i class="fas fa-bug fa-fw"></i> Vuln advisories
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('threat_actor_profile.review') }}" class="{{ 'active' if request.blueprint == 'threat_actor_profile' }}">
+          <i class="fas fa-user-secret fa-fw"></i> Threat actor profile
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('indicator_feed.index') }}" class="{{ 'active' if request.blueprint == 'indicator_feed' }}">
+          <i class="fas fa-satellite-dish fa-fw"></i> Indicator feed
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('detection_eng.review') }}" class="{{ 'active' if request.blueprint == 'detection_eng' }}">
+          <i class="fas fa-crosshairs fa-fw"></i> Detection eng. requests
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('products.index') }}" class="{{ 'active' if request.blueprint == 'products' }}">
+          <span class="misp-nav-icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><path d="m12 2 .117.007a1 1 0 0 1 .876.876L13 3v4l.005.15a2 2 0 0 0 1.838 1.844L15 9h4l.117.007a1 1 0 0 1 .876.876L20 10v9a3 3 0 0 1-2.824 2.995L17 22H7a3 3 0 0 1-2.995-2.824L4 19V5a3 3 0 0 1 2.824-2.995L7 2zm3 14H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2m0-4H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2m-5-4H9a1 1 0 1 0 0 2h1a1 1 0 0 0 0-2"/><path d="M19 7h-4l-.001-4.001z"/></g></svg></span> All products
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-label">Reporting</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('stats.index') }}" class="{{ 'active' if request.endpoint == 'stats.index' }}">
+          <i class="fas fa-chart-bar fa-fw"></i> Statistics
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('stats.scope') }}" class="{{ 'active' if request.endpoint == 'stats.scope' }}">
+          <i class="fas fa-crosshairs fa-fw"></i> Scope stats
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('pipeline.index') }}" class="{{ 'active' if request.blueprint == 'pipeline' }}">
+          <i class="fas fa-satellite-dish fa-fw"></i> Pipeline
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('logs.index') }}" class="{{ 'active' if request.endpoint == 'logs.index' }}">
+          <i class="fas fa-scroll fa-fw"></i> Logs
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('stakeholders.matrix') }}" class="{{ 'active' if request.endpoint == 'stakeholders.matrix' }}">
+          <i class="fas fa-table-cells fa-fw"></i> Stakeholder matrix
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-section-label">Settings</div>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ url_for('config_page.index') }}" class="{{ 'active' if request.endpoint == 'config_page.index' }}">
+          <i class="fas fa-sliders fa-fw"></i> Configuration
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('collection_sources.index') }}" class="{{ 'active' if request.blueprint == 'collection_sources' }}">
+          <i class="fas fa-satellite-dish fa-fw"></i> Collection sources
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-footer">
+      <span class="text-muted small"><i class="fas fa-circle-info fa-fw"></i> zsazsa v{{ app_version }}</span>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <div id="main-wrapper">
+
+    <!-- Top bar -->
+    <div id="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+        {% block page_subtitle %}{% endblock %}
+        {% if breadcrumb is defined %}
+        <nav aria-label="breadcrumb" class="topbar-breadcrumb">
+          <ol class="breadcrumb mb-0">
+            {% for crumb in breadcrumb %}
+            {% if loop.last %}
+            <li class="breadcrumb-item active">{{ crumb.label }}</li>
+            {% else %}
+            <li class="breadcrumb-item"><a href="{{ crumb.url }}">{{ crumb.label }}</a></li>
+            {% endif %}
+            {% endfor %}
+          </ol>
+        </nav>
+        {% endif %}
+      </div>
+      <div class="topbar-right">
+        <button type="button" class="job-badge d-none me-3" data-bs-toggle="modal" data-bs-target="#jobs-modal">
+          <span class="job-badge-icon"></span><span class="job-badge-text"></span>
+        </button>
+        <a class="misp-status-badge me-3" title="Checking MISP connection…"
+           href="{% block misp_object_url %}{{ misp_webapp_url }}{% endblock %}" target="_blank" rel="noopener">
+          <img src="{{ url_for('static', filename='misp-logo.png') }}" alt="MISP" class="misp-status-logo">
+          <span class="misp-status-icon misp-status-checking">
+            <i class="fas fa-circle-notch fa-spin"></i>
+          </span>
+        </a>
+        <button type="button" class="btn btn-xs btn-link p-0 me-3 admiralty-ref-btn"
+                data-bs-toggle="modal" data-bs-target="#admiralty-modal"
+                title="Intelligence Reference">
+          <i class="fas fa-star-half-stroke"></i>
+        </button>
+        <span class="topbar-user me-2"><i class="fas fa-circle-user fa-fw"></i> {{ current_user_email }}</span>
+        {% block topbar_actions %}{% endblock %}
+      </div>
+    </div>
+
+    <!-- Flash messages -->
+    <div id="flash-container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+      <div class="alert alert-{{ 'success' if category == 'success' else 'info' if category == 'info' else 'warning' }} alert-dismissible fade show alert-flash" role="alert">
+        <i class="fas fa-{{ 'check-circle' if category == 'success' else 'circle-info' }} me-2"></i>{{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endfor %}
+      {% endwith %}
+    </div>
+
+    <!-- Page content -->
+    <div id="page-content">
+      {% block content %}{% endblock %}
+    </div>
+
+    <footer id="app-footer">
+      <span class="footer-appname">zsazsa</span>
+      <span class="footer-version">v{{ app_version }}</span>
+      <a href="https://github.com/zsazsa-project/zsazsa/" target="_blank" rel="noopener" class="footer-github" title="GitHub repository">
+        <i class="fab fa-github"></i>
+      </a>
+      <a href="https://www.zsazsa-project.org" target="_blank" rel="noopener" class="footer-github" title="zsazsa project website">
+        <i class="fas fa-globe"></i>
+      </a>
+      {% if brand_company %}
+      <span class="footer-sep">·</span>
+      <span class="footer-org">{{ brand_company }}</span>
+      {% endif %}
+    </footer>
+
+  </div>
+</div>
+
+<!-- Background jobs, opened from the badge in the top bar -->
+<div class="modal fade" id="jobs-modal" tabindex="-1" aria-labelledby="jobs-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="jobs-modal-label">
+          <i class="fas fa-list-check me-2"></i>Background jobs
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">
+          Analyser runs, mailbox polls, cache refreshes and AI summaries keep going after you
+          leave the page. They are listed here until they age out, and finished analyser runs
+          also appear under Reporting &rsaquo; Pipeline.
+        </p>
+        <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+          <span class="text-muted" style="font-size:.72rem;">
+            Removing clears the entry, not the work, so queued and running jobs keep theirs
+            until they end or go quiet for hours.
+          </span>
+          <div class="btn-group flex-shrink-0" role="group" aria-label="Remove job entries">
+            <button type="button" class="btn btn-xs btn-outline-secondary" id="jobs-clear-completed"
+                    title="Remove the entries of runs that finished successfully">
+              <i class="fas fa-broom me-1"></i>Completed
+            </button>
+            <button type="button" class="btn btn-xs btn-outline-secondary" id="jobs-clear-all"
+                    title="Remove every finished entry, failures included">
+              <i class="fas fa-trash-can me-1"></i>All
+            </button>
+            <button type="button" class="btn btn-xs btn-outline-secondary" id="jobs-clear-abandoned"
+                    title="Remove entries left on running by a worker that died with its process">
+              <i class="fas fa-ghost me-1"></i>Abandoned
+            </button>
+          </div>
+        </div>
+        <div id="jobs-modal-list" class="list-group list-group-flush"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Intelligence reference modal (Admiralty + TLP) -->
+<div class="modal fade" id="admiralty-modal" tabindex="-1" aria-labelledby="admiralty-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content admiralty-modal-content">
+      <div class="admiralty-modal-header">
+        <div class="admiralty-modal-title-wrap">
+          <span class="admiralty-modal-icon"><i class="fas fa-book-open"></i></span>
+          <div>
+            <h5 class="admiralty-modal-title" id="admiralty-modal-label">Intelligence Reference</h5>
+            <p class="admiralty-modal-subtitle">Admiralty Scale · TLP · CTI Evaluation</p>
+          </div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0">
+
+        <!-- Tab navigation -->
+        <ul class="nav nav-tabs ps-3 pt-2" id="intel-ref-tabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="ir-admiralty-tab" data-bs-toggle="tab"
+                    data-bs-target="#ir-admiralty" type="button" role="tab" aria-selected="true">
+              <i class="fas fa-star-half-stroke me-1"></i>Admiralty Scale
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="ir-tlp-tab" data-bs-toggle="tab"
+                    data-bs-target="#ir-tlp" type="button" role="tab" aria-selected="false">
+              <i class="fas fa-tag me-1"></i>TLP
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="ir-ctiev-tab" data-bs-toggle="tab"
+                    data-bs-target="#ir-ctiev" type="button" role="tab" aria-selected="false">
+              <i class="fas fa-microscope me-1"></i>CTI Evaluation
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content p-3" id="intel-ref-tab-content">
+
+          <!-- Tab 1: Admiralty Scale -->
+          <div class="tab-pane fade show active" id="ir-admiralty" role="tabpanel" aria-labelledby="ir-admiralty-tab">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="admiralty-section-label">
+                  <i class="fas fa-star-half-stroke me-2"></i>Source Reliability
+                </div>
+                <div class="admiralty-scale-list">
+                  <div class="adm-row adm-a">
+                    <span class="adm-code">A</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Completely reliable</span>
+                      <span class="adm-desc">No doubt of authenticity or competency; history of complete reliability</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-b">
+                    <span class="adm-code">B</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Usually reliable</span>
+                      <span class="adm-desc">Minor doubt; history of valid information most of the time</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-c">
+                    <span class="adm-code">C</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Fairly reliable</span>
+                      <span class="adm-desc">Doubt of competency but has provided valid information in the past</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-d">
+                    <span class="adm-code">D</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Not usually reliable</span>
+                      <span class="adm-desc">Significant doubt but has provided valid information in the past</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-e">
+                    <span class="adm-code">E</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Unreliable</span>
+                      <span class="adm-desc">Lacking in trustworthiness and competency; history of invalid information</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-f">
+                    <span class="adm-code">F</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Cannot be judged</span>
+                      <span class="adm-desc">No basis exists for evaluating the reliability of the source</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="admiralty-section-label">
+                  <i class="fas fa-check-double me-2"></i>Information Credibility
+                </div>
+                <div class="admiralty-scale-list">
+                  <div class="adm-row adm-1">
+                    <span class="adm-code">1</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Confirmed</span>
+                      <span class="adm-desc">Confirmed by other independent sources; consistent with other information</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-2">
+                    <span class="adm-code">2</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Probably true</span>
+                      <span class="adm-desc">Not confirmed; logical in itself; consistent with other information</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-3">
+                    <span class="adm-code">3</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Possibly true</span>
+                      <span class="adm-desc">Not confirmed; reasonably logical; agrees with some other information</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-4">
+                    <span class="adm-code">4</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Doubtful</span>
+                      <span class="adm-desc">Not confirmed; possible but not logical; no other information on subject</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-5">
+                    <span class="adm-code">5</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Improbable</span>
+                      <span class="adm-desc">Not confirmed; not logical in itself; contradicted by other information</span>
+                    </div>
+                  </div>
+                  <div class="adm-row adm-6">
+                    <span class="adm-code">6</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Cannot be judged</span>
+                      <span class="adm-desc">No basis exists for evaluating the validity of the information</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="admiralty-footer-note">A lower letter and a lower number indicate higher confidence. Scores are independent: a reliable source can still produce unconfirmed information.</p>
+          </div>
+
+          <!-- Tab 2: TLP -->
+          <div class="tab-pane fade" id="ir-tlp" role="tabpanel" aria-labelledby="ir-tlp-tab">
+            <div class="admiralty-section-label">
+              <i class="fas fa-tag me-2"></i>Traffic Light Protocol (TLP)
+            </div>
+            <div class="admiralty-scale-list">
+              <div class="adm-row adm-tlp-red">
+                <span class="adm-tlp-pill">TLP:<strong>RED</strong></span>
+                <div class="adm-body">
+                  <span class="adm-name">Individual recipients only - no further disclosure</span>
+                  <span class="adm-desc">Cannot be effectively acted upon without significant risk. Recipients may not share with anyone else.</span>
+                </div>
+              </div>
+              <div class="adm-row adm-tlp-amber">
+                <span class="adm-tlp-pill">TLP:<strong>AMBER</strong></span>
+                <div class="adm-body">
+                  <span class="adm-name">Organization and its clients, need-to-know basis</span>
+                  <span class="adm-desc">Requires support to act upon but carries risk if shared more widely. Add <code class="adm-strict">+STRICT</code> to limit sharing to the organization only.</span>
+                </div>
+              </div>
+              <div class="adm-row adm-tlp-green">
+                <span class="adm-tlp-pill">TLP:<strong>GREEN</strong></span>
+                <div class="adm-body">
+                  <span class="adm-name">Community - not for public channels</span>
+                  <span class="adm-desc">Useful for awareness within the wider community. May be shared with peers and partners but not via publicly accessible channels.</span>
+                </div>
+              </div>
+              <div class="adm-row adm-tlp-clear">
+                <span class="adm-tlp-pill">TLP:<strong>CLEAR</strong></span>
+                <div class="adm-body">
+                  <span class="adm-name">No restrictions - may be shared publicly</span>
+                  <span class="adm-desc">Carries minimal or no foreseeable risk of misuse. Subject to standard copyright rules, may be shared without restriction.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: CTI Evaluation -->
+          <div class="tab-pane fade" id="ir-ctiev" role="tabpanel" aria-labelledby="ir-ctiev-tab">
+            <p class="text-muted small mb-3">
+              The CTI Evaluation taxonomy provides a structured vocabulary for scoring intelligence quality. Each of the twelve predicates uses a five-level scale. Apply these tags from the data collection page using the <i class="fas fa-microscope fa-xs"></i> button.
+            </p>
+            <div class="d-flex align-items-center gap-1 mb-3 flex-wrap">
+              <span class="text-muted small me-1">Scale:</span>
+              <span class="badge cti-eval-legend-very-low">Very Low</span>
+              <span class="badge cti-eval-legend-low">Low</span>
+              <span class="badge text-dark cti-eval-legend-moderate">Moderate</span>
+              <span class="badge cti-eval-legend-high">High</span>
+              <span class="badge cti-eval-legend-very-high">Very High</span>
+              <span class="text-muted small ms-2">lower = weaker, higher = stronger</span>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="admiralty-section-label mb-1"><i class="fas fa-chart-line me-2"></i>Analytical Quality</div>
+                <div class="admiralty-scale-list">
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">overall-score</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Overall Score</span>
+                      <span class="adm-desc">Composite quality rating combining all evaluation dimensions</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">accuracy</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Accuracy</span>
+                      <span class="adm-desc">Factual correctness and absence of errors or misleading claims</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">clarity</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Clarity</span>
+                      <span class="adm-desc">Readability, structure, and ease of understanding</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">specificity</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Specificity</span>
+                      <span class="adm-desc">Level of technical detail, context, and actionable depth</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="admiralty-section-label mt-3 mb-1"><i class="fas fa-bullseye me-2"></i>Operational Value</div>
+                <div class="admiralty-scale-list">
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">relevance</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Relevance</span>
+                      <span class="adm-desc">Alignment with your organisation's threat landscape and priorities</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">timeliness</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Timeliness</span>
+                      <span class="adm-desc">Currency and actionability given the current threat timeline</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">usefulness</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Usefulness</span>
+                      <span class="adm-desc">Practical operational value for your team's mission</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">confidence</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Confidence</span>
+                      <span class="adm-desc">Overall analytical confidence in the intelligence assessment</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="admiralty-section-label mb-1"><i class="fas fa-link me-2"></i>Provenance &amp; Fidelity</div>
+                <div class="admiralty-scale-list">
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">source-reliability</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Source Reliability</span>
+                      <span class="adm-desc">Trustworthiness and track record of the originating source</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">evidence-strength</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Evidence Strength</span>
+                      <span class="adm-desc">Quality and weight of evidence supporting the claims</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">format-validity</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Format Validity</span>
+                      <span class="adm-desc">Structural correctness of the MISP format and data model</span>
+                    </div>
+                  </div>
+                  <div class="adm-row">
+                    <span class="adm-code adm-code-eval">conversion-fidelity</span>
+                    <div class="adm-body">
+                      <span class="adm-name">Conversion Fidelity</span>
+                      <span class="adm-desc">Accuracy of data transformation or conversion from the original source</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('[data-gms-search]').forEach(function(searchInput) {
+      var field = searchInput.getAttribute('data-gms-search');
+      var list = document.getElementById('gms-' + field);
+      var selectedDisplay = document.getElementById('gms-selected-' + field);
+      if (!list) return;
+
+      function updateCount() {
+        if (!selectedDisplay) return;
+        var checked = list.querySelectorAll('input[type="checkbox"]:checked');
+        selectedDisplay.innerHTML = '';
+        checked.forEach(function(cb) {
+          var pill = document.createElement('span');
+          pill.className = 'gms-pill';
+          pill.textContent = cb.value;
+          selectedDisplay.appendChild(pill);
+        });
+      }
+
+      function applyFilter() {
+        var q = (searchInput.value || '').toLowerCase().trim();
+        list.querySelectorAll('.gms-item').forEach(function(item) {
+          var txt = (item.textContent || '').toLowerCase();
+          item.classList.toggle('gms-hidden', q && txt.indexOf(q) === -1);
+        });
+        updateCount();
+      }
+
+      searchInput.addEventListener('input', applyFilter);
+      list.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+        cb.addEventListener('change', updateCount);
+      });
+      updateCount();
+    });
+  });
+
+  // Scrolling the page with the pointer over a focused <select> silently changes
+  // its value in most browsers, which quietly rewrites whatever the form saves.
+  // Drop the focus instead; unfocused selects still scroll the page as usual.
+  document.addEventListener('wheel', (e) => {
+    const select = e.target.closest?.('select');
+    if (select && document.activeElement === select) {
+      e.preventDefault();
+      select.blur();
+    }
+  }, {capture: true, passive: false});
+
+  // Auto-dismiss flash messages after 4 seconds
+  setTimeout(() => {
+    try {
+      document.querySelectorAll('.alert-flash').forEach(el => {
+        const bsAlert = new bootstrap.Alert(el);
+        bsAlert.close();
+      });
+    } catch(e) {}
+  }, 4000);
+</script>
+{% block scripts %}{% endblock %}
+<script>
+  (function() {
+    var badges = document.querySelectorAll('.misp-status-badge');
+    if (!badges.length) return;
+
+    function update() {
+      fetch(SCRIPT_ROOT + '/api/misp-status')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          badges.forEach(function(badge) {
+            var icon = badge.querySelector('.misp-status-icon');
+            if (data.ok) {
+              icon.className = 'misp-status-icon misp-status-ok';
+              icon.innerHTML = '<i class="fas fa-circle-check"></i>';
+              badge.title = 'MISP connected: ' + (data.version || data.url || '');
+            } else {
+              icon.className = 'misp-status-icon misp-status-error';
+              icon.innerHTML = '<i class="fas fa-circle-xmark"></i>';
+              badge.title = 'MISP unreachable: ' + (data.error || data.url || '');
+            }
+          });
+        })
+        .catch(function() {
+          badges.forEach(function(badge) {
+            var icon = badge.querySelector('.misp-status-icon');
+            icon.className = 'misp-status-icon misp-status-error';
+            icon.innerHTML = '<i class="fas fa-circle-xmark"></i>';
+            badge.title = 'MISP status check failed';
+          });
+        });
+    }
+
+    update();
+    setInterval(update, 60000);
+  })();
+</script>
+<script>
+  // Background jobs. The badge is the only place an analyst can see that an
+  // analyser run or a batch of AI summaries is still going after they left the
+  // page that started it, so it lives in the top bar and polls from everywhere.
+  (function() {
+    var badges = document.querySelectorAll('.job-badge');
+    if (!badges.length) return;
+    var list = document.getElementById('jobs-modal-list');
+    var jobs = [];
+    /* Probe answers, by job id. The list repaints every few seconds, so an
+       answer is kept here and redrawn with its row rather than written into the
+       DOM once and lost on the next repaint. */
+    var probes = {};
+
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function ago(seconds) {
+      var mins = Math.round(seconds / 60);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      if (mins < 1440) return Math.round(mins / 60) + 'h ago';
+      return Math.round(mins / 1440) + 'd ago';
+    }
+
+    // "1 running, 1 queued" rather than one lump: a job waiting its turn is not
+    // the same news as a job doing something.
+    function activeText(active) {
+      var counts = {running: 0, queued: 0};
+      active.forEach(function(j) { counts[j.status] += 1; });
+      var parts = [];
+      if (counts.running) parts.push(counts.running + ' running');
+      if (counts.queued) parts.push(counts.queued + ' queued');
+      return parts.join(', ');
+    }
+
+    function paint() {
+      var active = jobs.filter(function(j) {
+        return (j.status === 'queued' || j.status === 'running') && !j.stale;
+      });
+      var stalled = jobs.filter(function(j) { return j.stale; });
+      // Once nothing runs, keep the outcome of the last hour in view, so an
+      // analyst coming back to the app still learns how it ended.
+      var recent = jobs.filter(function(j) {
+        return j.status !== 'running' && j.status !== 'queued' && j.age < 3600;
+      });
+      var failed = recent.filter(function(j) { return j.status === 'failed'; });
+
+      badges.forEach(function(badge) {
+        var icon = badge.querySelector('.job-badge-icon');
+        var text = badge.querySelector('.job-badge-text');
+        badge.classList.remove('job-badge-running', 'job-badge-done', 'job-badge-failed');
+        if (active.length) {
+          badge.classList.remove('d-none');
+          badge.classList.add('job-badge-running');
+          icon.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+          text.textContent = active.length === 1
+            ? active[0].label + ' ' + active[0].status
+            : activeText(active);
+          badge.title = active.map(function(j) { return j.label + ': ' + j.message; }).join('\n');
+        } else if (stalled.length) {
+          badge.classList.remove('d-none');
+          badge.classList.add('job-badge-failed');
+          icon.innerHTML = '<i class="fas fa-triangle-exclamation"></i>';
+          text.textContent = stalled[0].label + ' stalled';
+          badge.title = 'No progress for a while. The app was probably restarted while it ran.';
+        } else if (failed.length) {
+          badge.classList.remove('d-none');
+          badge.classList.add('job-badge-failed');
+          icon.innerHTML = '<i class="fas fa-circle-xmark"></i>';
+          text.textContent = failed.length === 1 ? failed[0].label + ' failed' : failed.length + ' jobs failed';
+          badge.title = failed.map(function(j) { return j.label + ': ' + j.message; }).join('\n');
+        } else if (recent.length) {
+          badge.classList.remove('d-none');
+          badge.classList.add('job-badge-done');
+          icon.innerHTML = '<i class="fas fa-circle-check"></i>';
+          text.textContent = recent[0].label + ' done';
+          badge.title = recent[0].message || '';
+        } else {
+          badge.classList.add('d-none');
+        }
+      });
+
+      if (!list) return;
+      if (!jobs.length) {
+        list.innerHTML = '<p class="text-muted mb-0">No jobs have run recently.</p>';
+        return;
+      }
+      list.innerHTML = jobs.map(function(job) {
+        var state = job.stale ? 'stalled' : job.status;
+        var tone = job.status === 'completed' ? 'text-bg-success'
+                 : (job.status === 'failed' || job.stale) ? 'text-bg-danger'
+                 : job.status === 'running' ? 'text-bg-primary' : 'text-bg-secondary';
+        var unfinished = job.status === 'queued' || job.status === 'running';
+        return '<div class="list-group-item px-0">'
+          + '<div class="d-flex justify-content-between align-items-center gap-2">'
+          + '<span class="fw-semibold">' + esc(job.label) + '</span>'
+          + '<span class="d-flex align-items-center gap-2">'
+          + (unfinished ? '<button type="button" class="btn btn-xs btn-outline-secondary job-probe-btn"'
+              + ' data-job-id="' + esc(job.id) + '" title="Ask whether this job is still working">'
+              + '<i class="fas fa-stethoscope"></i></button>' : '')
+          + '<span class="badge ' + tone + '">' + esc(state) + '</span>'
+          + '<span class="text-muted small">' + esc(ago(job.age)) + '</span>'
+          + '</span></div>'
+          + '<div class="text-muted small">' + esc(job.message) + '</div>'
+          + '<div class="small mt-1 text-muted job-probe-result" data-for="' + esc(job.id) + '">'
+          + (probes[job.id] || '') + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    function probeHtml(data) {
+      var lines = [esc(data.verdict)];
+      var ai = data.ai;
+      if (ai && !ai.error) {
+        var bits = [esc(ai.provider) + ' ' + esc(ai.model)];
+        bits.push(ai.reachable ? 'endpoint answered in ' + ai.latency_ms + 'ms'
+                               : 'endpoint did not answer');
+        if (ai.model_available === false) bits.push('the server does not list that model');
+        if (ai.loaded_models && ai.loaded_models.length) {
+          bits.push('loaded: ' + esc(ai.loaded_models.join(', ')));
+        }
+        lines.push('AI service: ' + bits.join(', ') + '.');
+      } else if (ai && ai.error) {
+        lines.push('AI service could not be checked: ' + esc(ai.error));
+      }
+      return lines.join('<br>');
+    }
+
+    document.addEventListener('click', function(ev) {
+      var btn = ev.target.closest('.job-probe-btn');
+      if (!btn) return;
+      var jobId = btn.dataset.jobId;
+      var target = document.querySelector('.job-probe-result[data-for="' + jobId + '"]');
+      if (target) target.textContent = 'Checking...';
+      btn.disabled = true;
+      fetch(SCRIPT_ROOT + '/pipeline/jobs/' + encodeURIComponent(jobId) + '/probe')
+        .then(zsazsaReadJson)
+        .then(function(data) {
+          probes[jobId] = data.ok ? probeHtml(data) : esc(data.error || 'Could not check the job.');
+          paint();
+        })
+        .catch(function(err) {
+          probes[jobId] = esc('Could not check the job: ' + zsazsaErrorText(err));
+          paint();
+        })
+        .finally(function() { btn.disabled = false; });
+    });
+
+    // Every request re-reads the MISP session and records an SSO sighting, so
+    // polling is kept to what is useful: quick while a job runs, slow when the
+    // app is idle, and nothing at all in a tab nobody is looking at.
+    var BUSY_MS = 5000;
+    var IDLE_MS = 30000;
+    var timer = null;
+
+    function schedule(delay) {
+      clearTimeout(timer);
+      timer = setTimeout(poll, delay);
+    }
+
+    function poll() {
+      if (document.hidden) { schedule(IDLE_MS); return; }
+      var next = IDLE_MS;
+      fetch(SCRIPT_ROOT + '/pipeline/jobs')
+        .then(zsazsaReadJson)
+        .then(function(data) {
+          if (!data.ok) return;
+          jobs = data.jobs || [];
+          next = data.running ? BUSY_MS : IDLE_MS;
+          paint();
+        })
+        .catch(function() { /* the badge is not worth an error on screen */ })
+        .finally(function() { schedule(next); });
+    }
+
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) schedule(200);
+    });
+
+    // A page that has just started a job calls this so the badge appears at
+    // once. Without it the job stays invisible until the next scheduled poll,
+    // half a minute later on an idle app, which reads as "nothing happened".
+    window.zsazsaJobsChanged = function() { schedule(200); };
+
+    // Watch one job until it ends, for the page that started it: the badge says
+    // that something is running, this delivers the outcome. onDone gets the
+    // finished job, onFail a sentence saying why the watching stopped, and the
+    // optional onProgress every poll that finds it still going.
+    window.zsazsaFollowJob = function(jobId, onDone, onFail, onProgress) {
+      var timer = setInterval(function() {
+        fetch(SCRIPT_ROOT + '/pipeline/run/' + encodeURIComponent(jobId))
+          .then(zsazsaReadJson)
+          .then(function(data) {
+            if (!data.ok || !data.job) {
+              clearInterval(timer);
+              onFail('The job is no longer known to the server.');
+            } else if (data.job.status === 'completed') {
+              clearInterval(timer);
+              onDone(data.job);
+            } else if (data.job.status === 'failed') {
+              clearInterval(timer);
+              onFail(data.job.error || data.job.message || 'The job failed.');
+            } else if (onProgress) {
+              onProgress(data.job);
+            }
+          })
+          .catch(function(err) {
+            clearInterval(timer);
+            onFail('Lost track of the job: ' + zsazsaErrorText(err));
+          });
+      }, 4000);
+    };
+
+    // The list is shared through Redis, so clearing it clears it for everyone.
+    var CLEAR_CONFIRM = {
+      all: 'Remove every finished job entry, failures included?',
+      abandoned: 'Remove entries for work that went quiet hours ago? Anything still running '
+               + 'carries on, it just stops being listed.'
+    };
+
+    // Only the list is cleared; the server keeps anything still queued or
+    // running, so the repaint afterwards shows what survived.
+    function clearJobs(scope, button) {
+      if (CLEAR_CONFIRM[scope] && !confirm(CLEAR_CONFIRM[scope])) return;
+      var csrf = document.querySelector('meta[name="csrf-token"]');
+      button.disabled = true;
+      fetch(SCRIPT_ROOT + '/pipeline/jobs/clear', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf ? csrf.content : ''},
+        body: JSON.stringify({scope: scope})
+      })
+        .then(zsazsaReadJson)
+        .then(function(data) {
+          if (!data.ok) alert('Could not remove entries: ' + (data.error || 'unknown reason.'));
+        })
+        .catch(function(err) { alert('Could not remove entries: ' + zsazsaErrorText(err)); })
+        .finally(function() { button.disabled = false; schedule(200); });
+    }
+
+    [['jobs-clear-completed', 'completed'],
+     ['jobs-clear-all', 'all'],
+     ['jobs-clear-abandoned', 'abandoned']].forEach(function(pair) {
+      var button = document.getElementById(pair[0]);
+      if (button) button.addEventListener('click', function() { clearJobs(pair[1], button); });
+    });
+
+    poll();
+  })();
+</script>
+<script>
+  // Unsaved changes. Everything an analyst does on an edit page lives in the
+  // form until it is posted: deleting a story, rewriting a section, picking
+  // scope items. Leaving throws all of it away without a word. Forms carrying
+  // data-unsaved-warning are compared against the state they were rendered
+  // with, and leaving with a difference asks first.
+  //
+  // A form that is rendered holding something MISP does not have yet adds
+  // data-unsaved-initially and counts as changed from the start; the briefing
+  // form does when stories have just been added to a draft.
+  //
+  // A page that saves over AJAX has no submit to watch and tracks its own edits
+  // instead (the configuration and collection source pages do). It pushes a
+  // function answering "is anything unsaved" onto window.zsazsaUnsavedChecks
+  // from its own script block, which runs before this one.
+  (function() {
+    var forms = Array.prototype.slice.call(document.querySelectorAll('form[data-unsaved-warning]'));
+    var checks = window.zsazsaUnsavedChecks = window.zsazsaUnsavedChecks || [];
+    if (!forms.length && !checks.length) return;
+    var MESSAGE = 'This page has changes that have not been saved. Leave and lose them?';
+    var startsUnsaved = forms.some(function(form) { return form.hasAttribute('data-unsaved-initially'); });
+    var snapshots = new Map();
+    var leaving = false;
+
+    // Field names and values in document order, so an added, removed or
+    // renumbered field counts as a change just as an edited one does.
+    function state(form) {
+      var parts = [];
+      new FormData(form).forEach(function(value, key) {
+        parts.push(key + '=' + (typeof value === 'string' ? value : value.name));
+      });
+      return parts.join('\n');
+    }
+
+    function dirty() {
+      if (leaving) return false;
+      return startsUnsaved
+        || checks.some(function(check) { return check(); })
+        || forms.some(function(form) { return snapshots.get(form) !== state(form); });
+    }
+
+    // On load rather than DOMContentLoaded: a page that fills fields from its
+    // own script on startup would otherwise look changed from the first second.
+    window.addEventListener('load', function() {
+      forms.forEach(function(form) { snapshots.set(form, state(form)); });
+    });
+
+    forms.forEach(function(form) {
+      // A form can block its own submit over something else that is wrong (the
+      // profile form does, when no audience is picked). The page stays, and so
+      // must the warning.
+      form.addEventListener('submit', function(ev) {
+        if (!ev.defaultPrevented) leaving = true;
+      });
+    });
+
+    // Navigating within the app. beforeunload would catch this too, but only
+    // with the browser's own wording, which names neither the page nor what is
+    // at stake; asking here means one dialog that says it.
+    document.addEventListener('click', function(ev) {
+      var link = ev.target.closest('a[href]');
+      if (!link) return;
+      var href = link.getAttribute('href') || '';
+      if (!href || href.charAt(0) === '#') return;
+      // mailto:, tel: and javascript: links leave the page where it is.
+      if (link.protocol !== 'http:' && link.protocol !== 'https:') return;
+      if (link.target && link.target !== '_self') return;
+      if (link.hasAttribute('download') || link.dataset.bsToggle) return;
+      if (!dirty()) return;
+      if (window.confirm(MESSAGE)) {
+        // Answered once, so stay quiet on the way out. If the click turns out
+        // not to navigate after all, the warning comes back.
+        leaving = true;
+        setTimeout(function() { leaving = false; }, 2000);
+      } else {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    }, true);
+
+    // Closing the tab, reloading, or going back. Browsers show their own wording.
+    window.addEventListener('beforeunload', function(ev) {
+      if (!dirty()) return;
+      ev.preventDefault();
+      ev.returnValue = '';
+    });
+  })();
+</script>
+<script>
+  (function() {
+    var token = document.querySelector('meta[name="csrf-token"]').content;
+    document.querySelectorAll('form').forEach(function(form) {
+      var method = (form.getAttribute('method') || 'get').toLowerCase();
+      if (method !== 'get') {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'csrf_token';
+        input.value = token;
+        form.appendChild(input);
+      }
+    });
+  })();
+</script>
+</body>
+</html>

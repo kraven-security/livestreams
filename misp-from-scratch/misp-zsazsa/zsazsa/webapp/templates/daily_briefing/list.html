@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% from "_sort_header.html" import sort_th %}
+{% from "_macros.html" import story_scope %}
+
+{% block title %}Daily briefings | zsazsa CTI{% endblock %}
+{% block page_title %}Daily threat briefings{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('data_collection.index', briefing_mode=1) }}" class="btn btn-sm btn-primary">
+  <i class="fas fa-plus me-1"></i> New briefing
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="card content-card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label small mb-1">Review state</label>
+        <select name="state" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">All states</option>
+          {% for s in review_states %}
+          <option value="{{ s }}" {{ 'selected' if state_filter == s }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if state_filter %}
+      <div class="col-auto">
+        <a href="{{ url_for('daily_briefing.list_briefings') }}" class="btn btn-sm btn-outline-secondary">Clear</a>
+      </div>
+      {% endif %}
+      <div class="col-auto ms-auto text-muted small">{{ briefings | length }} briefing{{ 's' if briefings|length != 1 }}</div>
+    </form>
+  </div>
+</div>
+
+<div class="card content-card">
+  <div class="card-body p-0">
+    {% if briefings %}
+    <table class="table table-hover zsazsa-table mb-0">
+      <thead>
+        <tr>
+          {{ sort_th('Date', 'bdate', sort, dir, 'daily_briefing.list_briefings', state_filter) }}
+          {{ sort_th('Title', 'title', sort, dir, 'daily_briefing.list_briefings', state_filter) }}
+          <th>Stories</th>
+          <th>Author</th>
+          <th>TLP</th>
+          {{ sort_th('State', 'state', sort, dir, 'daily_briefing.list_briefings', state_filter) }}
+          {{ sort_th('Published', 'date', sort, dir, 'daily_briefing.list_briefings', state_filter) }}
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in briefings %}
+        {% set story_count = b.story_count or (b.stories | length) %}
+        <tr id="briefing-row-{{ b.uuid }}">
+          <td>
+            <a href="{{ url_for('daily_briefing.detail', id=b.uuid) }}" class="text-decoration-none fw-semibold">
+              {{ b.date or '-' }}
+            </a>
+          </td>
+          <td>{{ b.title or '-' }}</td>
+          <td>{{ story_count }} stor{{ 'y' if story_count == 1 else 'ies' }}</td>
+          <td>{{ b.author or '-' }}</td>
+          <td><span class="tlp-badge tlp-{{ b.tlp | slug }}">TLP:{{ b.tlp | upper }}</span></td>
+          <td>
+            {% if b.review_state == 'published' %}<span class="badge bg-success">published</span>
+            {% else %}<span class="badge bg-secondary">draft</span>{% endif %}
+          </td>
+          <td style="white-space:nowrap;">{{ b.published_at.strftime('%Y-%m-%d') if b.published_at else '-' }}</td>
+          <td class="text-end">
+            <div class="d-inline-flex flex-nowrap align-items-center justify-content-end gap-2">
+              <span class="d-inline-flex flex-nowrap gap-1">
+                <button type="button" class="btn btn-xs btn-outline-secondary preview-toggle-btn"
+                        data-target="briefing-preview-{{ b.uuid }}" title="Preview">
+                  <i class="fas fa-eye"></i>
+                </button>
+                <button type="button" class="btn btn-xs btn-outline-secondary feedback-btn"
+                        data-uuid="{{ b.uuid }}" data-label="Briefing {{ b.date or b.uuid }}"
+                        data-bs-toggle="modal" data-bs-target="#feedback-modal" title="Give feedback">
+                  <i class="fas fa-comment-dots"></i>
+                </button>
+                <a href="{{ url_for('daily_briefing.pdf', id=b.uuid) }}" class="btn btn-xs btn-outline-secondary" title="Download PDF">
+                  <i class="fas fa-file-pdf"></i>
+                </a>
+                {% if b.review_state == 'published' %}
+                <form method="post" action="{{ url_for('daily_briefing.resend', id=b.uuid) }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-xs btn-outline-primary" title="Resend to stakeholders">
+                    <i class="fas fa-paper-plane"></i>
+                  </button>
+                </form>
+                {% else %}
+                <span class="btn btn-xs btn-outline-primary btn-ghost" aria-hidden="true"><i class="fas fa-paper-plane"></i></span>
+                {% endif %}
+              </span>
+              <span class="vr"></span>
+              <span class="d-inline-flex flex-nowrap gap-1">
+                {% if b.review_state == 'published' %}
+                <span class="btn btn-xs btn-outline-secondary btn-ghost" aria-hidden="true"><i class="fas fa-pen"></i></span>
+                <span class="btn btn-xs btn-outline-danger btn-ghost" aria-hidden="true"><i class="fas fa-trash"></i></span>
+                {% else %}
+                <a href="{{ url_for('daily_briefing.edit', id=b.uuid) }}" class="btn btn-xs btn-outline-secondary" title="Edit">
+                  <i class="fas fa-pen"></i>
+                </a>
+                <form method="post" action="{{ url_for('daily_briefing.delete', id=b.uuid) }}"
+                      class="d-inline"
+                      onsubmit="return confirm('Delete briefing{{ (' ' + b.date) if b.date else '' }}?');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-xs btn-outline-danger" title="Delete briefing">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </span>
+            </div>
+          </td>
+        </tr>
+        {# ── Inline preview row ── #}
+        <tr id="briefing-preview-{{ b.uuid }}" style="display:none;">
+          <td colspan="8" class="p-0">
+            <div class="px-4 py-3" style="background:var(--surface-muted);border-top:1px solid var(--border-light);">
+              <div class="row g-3">
+                <div class="col-md-9">
+                  {% if b.summary %}
+                  <div class="mb-3">
+                    <div class="fw-semibold small mb-1">
+                      <i class="fas fa-align-left me-1 text-muted"></i>Briefing summary
+                      {% if b.summary_stale %}
+                      <span class="badge text-bg-warning" title="The stories changed after this summary was written">Out of date</span>
+                      {% endif %}
+                    </div>
+                    <div class="report-md-body" style="font-size:.82rem;color:var(--neutral-700);" data-md="{{ b.summary | e }}"></div>
+                  </div>
+                  {% endif %}
+                  {% for story in b.stories %}
+                  <div class="mb-3">
+                    <div class="fw-semibold small mb-1">
+                      <i class="fas fa-newspaper me-1 text-muted"></i>Story {{ loop.index }}: {{ story.title or '(untitled)' }}
+                    </div>
+                    <div class="report-md-body" style="font-size:.82rem;color:var(--neutral-700);" data-md="{{ story.content | e }}"></div>
+                    {% if story.source_url %}
+                    <div class="scope-row" style="font-size:.75rem;">
+                      <a href="{{ story.source_url }}" target="_blank" rel="noopener">{{ story.source_url | truncate(80) }}</a>
+                    </div>
+                    {% endif %}
+                    {{ story_scope(story) }}
+                  </div>
+                  {% else %}
+                  <p class="text-muted small">No stories yet.</p>
+                  {% endfor %}
+                  {% if b.escalations %}
+                  <div class="mt-2">
+                    <div class="fw-semibold small mb-1 text-muted">Escalations</div>
+                    <div style="white-space:pre-wrap;font-size:.82rem;">{{ b.escalations }}</div>
+                  </div>
+                  {% endif %}
+                </div>
+                <div class="col-md-3">
+                  <div class="small">
+                    <div class="scope-row"><span class="pretext">Date:</span> {{ b.date or '-' }}</div>
+                    <div class="scope-row"><span class="pretext">Author:</span> {{ b.author or '-' }}</div>
+                    <div class="scope-row"><span class="pretext">TLP:</span> <span class="tlp-badge tlp-{{ b.tlp | slug }}">TLP:{{ b.tlp | upper }}</span></div>
+                  </div>
+                  {% set summary = scope_summaries.get(b.uuid) %}
+                  {% if summary %}
+                  <div class="mt-2 small">
+                    <div class="fw-semibold mb-1">Scope summary</div>
+                    {% for label, ranked in summary %}
+                    <div class="scope-row"><span class="pretext">{{ label }}:</span><br>
+                      {% for value, count in ranked %}
+                      <span class="scope-chip">{{ value }}{% if count > 1 %} &times;{{ count }}{% endif %}</span>
+                      {% endfor %}
+                    </div>
+                    {% endfor %}
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="p-4 text-muted">
+      No briefings yet.
+      <a href="{{ url_for('data_collection.index', briefing_mode=1) }}">Start today's briefing</a>.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% include "_published_delete_note.html" %}
+
+{# ── Inline feedback modal ── #}
+<div class="modal fade" id="feedback-modal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-comment-dots me-2"></i>Feedback - <span id="feedback-modal-label"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="feedback-form" method="post" action="">
+        <div class="modal-body">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="mb-3">
+            <label class="form-label small">Your name (optional)</label>
+            <input type="text" name="author" class="form-control form-control-sm" placeholder="Analyst name">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Rating</label>
+            <select name="rating" class="form-select form-select-sm">
+              <option value="">- rating -</option>
+              <option value="Very useful">Very useful</option>
+              <option value="Useful">Useful</option>
+              <option value="Somewhat useful">Somewhat useful</option>
+              <option value="Not useful">Not useful</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Comments</label>
+            <textarea name="comment" class="form-control form-control-sm" rows="3" placeholder="What worked, what didn't, what's missing…"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary">
+            <i class="fas fa-paper-plane me-1"></i> Submit feedback
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
+
+/* Same story-label muting as the briefing detail page. */
+var LEAD_LABEL = /(<p>|<br\s*\/?>)(\s*)([A-Za-z][A-Za-z ]{1,33}:)(?=\s)/g;
+function muteLeadLabels(html) {
+  return html.replace(LEAD_LABEL, '$1$2<span class="pretext">$3</span>');
+}
+
+document.querySelectorAll('.report-md-body').forEach(function(el) {
+  var raw = el.getAttribute('data-md') || '';
+  if (!raw.trim()) { el.innerHTML = '<em class="text-muted">(no content)</em>'; }
+  else if (typeof marked !== 'undefined') el.innerHTML = muteLeadLabels(typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(marked.parse(raw)) : marked.parse(raw));
+  else el.textContent = raw;
+});
+
+/* ── Preview toggle ── */
+document.querySelectorAll('.preview-toggle-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var targetId = btn.dataset.target;
+    var row = document.getElementById(targetId);
+    if (!row) return;
+    var visible = row.style.display !== 'none';
+    row.style.display = visible ? 'none' : '';
+    btn.querySelector('i').className = visible ? 'fas fa-eye' : 'fas fa-eye-slash';
+  });
+});
+
+/* ── Feedback modal ── */
+document.querySelectorAll('.feedback-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var uuid = btn.dataset.uuid;
+    var label = btn.dataset.label || '';
+    document.getElementById('feedback-modal-label').textContent = label;
+    document.getElementById('feedback-form').action = '/briefing/' + uuid + '/feedback';
+  });
+});
+</script>
+{% endblock %}

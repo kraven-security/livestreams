@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+
+{% set is_edit = stakeholder is not none %}
+{% block title %}{{ 'Edit' if is_edit else 'New' }} Stakeholder | zsazsa CTI{% endblock %}
+{% block page_title %}{{ 'Edit' if is_edit else 'New' }} stakeholder{% endblock %}
+
+{% block misp_object_url %}{% if is_edit %}{{ stakeholder.misp_url }}{% else %}{{ misp_webapp_url }}{% endif %}{% endblock %}
+{% block topbar_actions %}
+<a href="{{ url_for('stakeholders.list') }}" class="btn btn-sm btn-light border shadow-sm">
+  <i class="fas fa-arrow-left me-1"></i> Back to list
+</a>
+{% endblock %}
+
+{% block content %}
+<form method="post" class="row g-4" data-unsaved-warning>
+
+  <div class="col-lg-7">
+
+    <!-- Identity -->
+    <div class="card content-card mb-4">
+      <div class="card-header"><i class="fas fa-id-card me-2"></i>Identity</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label required-label">Name</label>
+          <input type="text" name="name" class="form-control" required value="{{ stakeholder.name if is_edit else '' }}">
+        </div>
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label">Role</label>
+            <select name="role" class="form-select">
+              <option value="">- Select role -</option>
+              {% for r in roles %}
+              <option value="{{ r }}" {{ 'selected' if is_edit and stakeholder.role == r }}>{{ r }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Optional, but highly advised.</div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Organisation</label>
+            <select name="organization" class="form-select">
+              <option value="">- none -</option>
+              {% for o in organisations %}
+              <option value="{{ o.uuid }}" {{ 'selected' if is_edit and stakeholder.organization == o.uuid }}>{{ o.name }}</option>
+              {% endfor %}
+            </select>
+            {% if organisations %}
+            <div class="form-text">Optional, but highly advised. Organisations are sourced from the MISP webapp store.</div>
+            {% else %}
+            <div class="form-text">
+              Optional, but highly advised. Organisations come from the MISP webapp store, so
+              <a href="{{ url_for('community.organisations') }}">register one in Organisations</a> first.
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-label">Stakeholder type</label>
+          {% set current_type = stakeholder.stakeholder_type if is_edit else 'External' %}
+          <div class="d-flex gap-2 mt-1">
+            <input type="radio" class="btn-check" name="stakeholder_type" id="stype_internal" value="Internal"
+                   {{ 'checked' if current_type == 'Internal' }}>
+            <label class="btn btn-outline-primary" for="stype_internal">
+              <i class="fas fa-building me-1"></i>Internal
+            </label>
+            <input type="radio" class="btn-check" name="stakeholder_type" id="stype_external" value="External"
+                   {{ 'checked' if current_type != 'Internal' }}>
+            <label class="btn btn-outline-secondary" for="stype_external">
+              <i class="fas fa-globe me-1"></i>External
+            </label>
+          </div>
+          <div class="form-text">Internal stakeholders are part of your own organisation.</div>
+        </div>
+
+        <div class="mt-3">
+          {# The button sits next to the label, not inside it: a click anywhere
+             on a label is forwarded to the control it contains, so wrapping it
+             made "Contact details" add a row. #}
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="form-label mb-0">Contact details</span>
+            <button type="button" class="btn btn-xs btn-outline-secondary" id="add-contact">
+              <i class="fas fa-plus me-1"></i>Add
+            </button>
+          </div>
+          <div id="contacts-list">
+            {% set contact_list = (stakeholder.contacts if is_edit else []) or [] %}
+            {% for c in contact_list %}
+            <div class="contact-row d-flex gap-2 mb-2 align-items-center">
+              <select name="contact_type" class="form-select form-select-sm" style="width:8rem;flex-shrink:0;">
+                {% for t in ['Email','Phone','Teams','Mattermost','Other'] %}
+                <option value="{{ t }}" {{ 'selected' if c.type == t }}>{{ t }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" name="contact_value" class="form-control form-control-sm" value="{{ c.value }}" placeholder="Value">
+              <div class="form-check form-check-inline mb-0" style="white-space:nowrap;" title="Mark as preferred contact">
+                <input class="form-check-input contact-preferred-radio" type="radio" name="contact_preferred"
+                       value="{{ loop.index0 }}" id="cpref_{{ loop.index0 }}"
+                       {{ 'checked' if c.get('preferred') }}>
+                <label class="form-check-label small text-muted" for="cpref_{{ loop.index0 }}">Preferred</label>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-danger remove-contact" title="Remove">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+            {% endfor %}
+          </div>
+          <template id="contact-template">
+            <div class="contact-row d-flex gap-2 mb-2 align-items-center">
+              <select name="contact_type" class="form-select form-select-sm" style="width:8rem;flex-shrink:0;">
+                <option value="Email">Email</option>
+                <option value="Phone">Phone</option>
+                <option value="Teams">Teams</option>
+                <option value="Mattermost">Mattermost</option>
+                <option value="Other">Other</option>
+              </select>
+              <input type="text" name="contact_value" class="form-control form-control-sm" placeholder="Value">
+              <div class="form-check form-check-inline mb-0" style="white-space:nowrap;" title="Mark as preferred contact">
+                <input class="form-check-input contact-preferred-radio" type="radio" name="contact_preferred" value="">
+                <label class="form-check-label small text-muted">Preferred</label>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-danger remove-contact" title="Remove">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </template>
+          <div class="form-text">
+            Reference details only, for knowing who to reach and how. Nothing is
+            delivered here: products and notifications go to the channels picked
+            under Notification channels. Mark one contact as preferred to have it
+            shown first.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Stakeholder positioning -->
+    <div class="card content-card mb-4">
+      <div class="card-header"><i class="fas fa-chart-simple me-2"></i>Stakeholder positioning</div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Used to place this stakeholder on the <a href="{{ url_for('stakeholders.matrix') }}">stakeholder matrix</a>
+          and to tailor how they are engaged.
+        </p>
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label d-flex justify-content-between align-items-center">
+              <span>Influence</span>
+              <span class="badge text-bg-light">{{ stakeholder.influence if is_edit else 5 }}/10</span>
+            </label>
+            <input type="range" class="form-range" name="influence" min="1" max="10"
+                   value="{{ stakeholder.influence if is_edit else 5 }}"
+                   oninput="this.parentNode.querySelector('.badge').textContent = this.value + '/10'">
+            <div class="form-text">How much power this stakeholder has over the CTI program's priorities and resources.</div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label d-flex justify-content-between align-items-center">
+              <span>Interest</span>
+              <span class="badge text-bg-light">{{ stakeholder.interest if is_edit else 5 }}/10</span>
+            </label>
+            <input type="range" class="form-range" name="interest" min="1" max="10"
+                   value="{{ stakeholder.interest if is_edit else 5 }}"
+                   oninput="this.parentNode.querySelector('.badge').textContent = this.value + '/10'">
+            <div class="form-text">How closely this stakeholder follows and acts on the intelligence they receive.</div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-label">Engagement strategy</label>
+          <textarea name="engagement_strategy" class="form-control" rows="3"
+                    placeholder="e.g. Monthly briefing call, prioritise flash alerts, invite to the quarterly review...">{{ stakeholder.engagement_strategy if is_edit else '' }}</textarea>
+          <div class="form-text">Specific notes on how to keep this stakeholder engaged, on top of the general guidance for their quadrant.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card content-card">
+      <div class="card-header"><i class="fas fa-note-sticky me-2"></i>Notes</div>
+      <div class="card-body">
+        <textarea name="notes" class="form-control" rows="4" placeholder="Any additional context about this stakeholder…">{{ stakeholder.notes if is_edit else '' }}</textarea>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="col-lg-5">
+
+    <!-- Intelligence preferences -->
+    <div class="card content-card mb-4">
+      <div class="card-header"><i class="fas fa-shield-halved me-2"></i>Intelligence preferences</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">TLP clearance</label>
+          <select name="tlp_clearance" class="form-select">
+            {% for tlp in tlp_levels %}
+            <option value="{{ tlp }}" {{ 'selected' if is_edit and stakeholder.tlp_clearance == tlp else ('selected' if not is_edit and tlp == 'amber') }}>
+              TLP:{{ tlp | upper }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Maximum TLP classification this stakeholder may receive.</div>
+        </div>
+
+        {% if notification_channels %}
+        <div class="mb-4">
+          <label class="form-label">Notification channels</label>
+          <div class="d-flex flex-wrap gap-2">
+            {% set current_channels = (stakeholder.notification_channels if is_edit else []) or [] %}
+            {% for ch in notification_channels %}
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="notification_channels"
+                     value="{{ ch.id }}" id="nch_{{ loop.index }}"
+                     {{ 'checked' if ch.id in current_channels }}>
+              <label class="form-check-label" for="nch_{{ loop.index }}">
+                {% if ch.type == 'flowintel' %}<img src="{{ url_for('static', filename='flowintel-icon.png') }}" alt="Flowintel" style="height:14px;width:auto;" class="me-1">{% elif ch.type == 'email' %}<i class="fas fa-envelope me-1" style="color:#0078f1;"></i>{% endif %}
+                {{ ch.name }}
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-text">Select which channels should receive notifications for this stakeholder.</div>
+        </div>
+        {% endif %}
+
+        <label class="form-label">Products subscribed</label>
+        <div class="product-checklist">
+          {% for p in products %}
+          {% set current_mode = (stakeholder.product_modes.get(p) if is_edit and stakeholder.product_modes else default_subscription_mode) %}
+          <div class="form-check d-flex align-items-center gap-2 mb-2">
+            <input class="form-check-input mt-0" type="checkbox" name="products" value="{{ p }}" id="prod_{{ loop.index }}"
+              {{ 'checked' if is_edit and p in stakeholder.products }}>
+            <label class="form-check-label flex-grow-1" for="prod_{{ loop.index }}">{{ p }}</label>
+            {# The mode picker is hidden for now, but the stored mode still has to
+               survive a save, so it travels with the form. #}
+            <input type="hidden" name="mode__{{ p }}" value="{{ current_mode }}">
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary flex-grow-1">
+        <i class="fas fa-floppy-disk me-1"></i> {{ 'Save changes' if is_edit else 'Create stakeholder' }}
+      </button>
+      <a href="{{ url_for('stakeholders.detail', id=stakeholder.id) if is_edit else url_for('stakeholders.list') }}" class="btn btn-outline-secondary">
+        Cancel
+      </a>
+    </div>
+
+  </div>
+
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var list = document.getElementById('contacts-list');
+  var tpl = document.getElementById('contact-template');
+  var addBtn = document.getElementById('add-contact');
+  if (!list || !tpl || !addBtn) return;
+
+  function renumberRadios() {
+    list.querySelectorAll('.contact-row').forEach(function(row, i) {
+      var radio = row.querySelector('.contact-preferred-radio');
+      var label = row.querySelector('.form-check-label');
+      if (radio) { radio.value = String(i); radio.id = 'cpref_' + i; }
+      if (label) label.htmlFor = 'cpref_' + i;
+    });
+  }
+
+  function bindRow(row) {
+    row.querySelector('.remove-contact').addEventListener('click', function() {
+      row.remove();
+      renumberRadios();
+    });
+  }
+
+  list.querySelectorAll('.contact-row').forEach(bindRow);
+
+  addBtn.addEventListener('click', function() {
+    var node = tpl.content.firstElementChild.cloneNode(true);
+    list.appendChild(node);
+    bindRow(node);
+    renumberRadios();
+    node.querySelector('input[name="contact_value"]').focus();
+  });
+})();
+</script>
+{% endblock %}
