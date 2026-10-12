@@ -1,0 +1,12 @@
+{
+  "returnFormat": "json",
+  "tags": "livestream-demo",
+  "limit": 100,
+  "page": 1,
+  "withAttachments": false,
+  "metadata": false,
+  "date": [
+    "${__timeFrom:date:YYYY-MM-DD}",
+    "${__timeTo:date:YYYY-MM-DD}"
+  ]
+}

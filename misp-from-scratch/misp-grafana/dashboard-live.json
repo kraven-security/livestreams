@@ -1,0 +1,744 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_MISP",
+      "label": "MISP Infinity",
+      "type": "datasource",
+      "pluginId": "yesoreyeram-infinity-datasource",
+      "pluginName": "Infinity"
+    }
+  ],
+  "id": null,
+  "uid": "misp-livestream-demo",
+  "title": "MISP threat intelligence demo",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "utc",
+  "refresh": "",
+  "time": {
+    "from": "now-30d/d",
+    "to": "now"
+  },
+  "tags": [
+    "MISP",
+    "livestream"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "misp_url",
+        "type": "constant",
+        "query": "https://misp.example",
+        "hide": 2,
+        "current": {
+          "text": "https://misp.example",
+          "value": "https://misp.example"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Scope and meaning",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**SYNTHETIC TRAINING DATA** \u2014 `livestream-demo` events visible to this MISP API key. Whole UTC event dates within the selected range. Page 1 only, maximum 100 events; verify page 2 is empty. Counts represent current records, including context attributes. Most recent modification is an event timestamp; it does not measure ingestion or platform health."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Visible demo events",
+      "type": "stat",
+      "description": "Current visible records for the demo tag and selected whole UTC event dates. Page 1, up to 100 events.",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "table",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events] | {events: length}",
+          "columns": [
+            {
+              "selector": "events",
+              "text": "events",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Attribute records including context",
+      "type": "stat",
+      "description": "Current visible records for the demo tag and selected whole UTC event dates. Page 1, up to 100 events.",
+      "gridPos": {
+        "x": 6,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "table",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events | attrs] | {attributes: length}",
+          "columns": [
+            {
+              "selector": "attributes",
+              "text": "attributes",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Unpublished demo events",
+      "type": "stat",
+      "description": "Current visible records for the demo tag and selected whole UTC event dates. Page 1, up to 100 events.",
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "table",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events | select((.published | truth) | not)] | {unpublished: length}",
+          "columns": [
+            {
+              "selector": "unpublished",
+              "text": "unpublished",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Most recent event modification",
+      "type": "stat",
+      "description": "Current visible records for the demo tag and selected whole UTC event dates. Page 1, up to 100 events.",
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "table",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events | (.timestamp | tonumber)] | {latest_modified: (if length > 0 then max * 1000 else null end)}",
+          "columns": [
+            {
+              "selector": "latest_modified",
+              "text": "latest_modified",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Events by reported event date UTC",
+      "type": "timeseries",
+      "description": "Counts current events grouped by Event.date. This date is user supplied. Missing dates have no bucket; this is not ingestion history.",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "timeseries",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events | {date: .date}] | group_by(.date) | .[] | {time: (.[0].date + \"T00:00:00Z\"), events: length}",
+          "columns": [
+            {
+              "selector": "time",
+              "text": "time",
+              "type": "timestamp"
+            },
+            {
+              "selector": "events",
+              "text": "events",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Attribute records by type",
+      "type": "barchart",
+      "description": "Includes event and object attributes, deduplicated by UUID within each event. Repeated values across events remain separate records.",
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "table",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events | attrs] | group_by(.type) | map({type: .[0].type, count: length}) | sort_by(-.count, .type) | .[]",
+          "columns": [
+            {
+              "selector": "type",
+              "text": "type",
+              "type": "string"
+            },
+            {
+              "selector": "count",
+              "text": "count",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "always",
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Attributes marked to_ids and context",
+      "type": "piechart",
+      "description": "The to_ids flag expresses intended IDS use; it is not a confidence or detection score.",
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "table",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events | attrs | {label: (if (.to_ids | truth) then \"to_ids true\" else \"Context only\" end)}] | group_by(.label) | .[] | {label: .[0].label, count: length}",
+          "columns": [
+            {
+              "selector": "label",
+              "text": "label",
+              "type": "string"
+            },
+            {
+              "selector": "count",
+              "text": "count",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "pieType": "donut",
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "values": [
+            "value"
+          ]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Events by synthetic theme tag",
+      "type": "barchart",
+      "description": "Custom demo labels, not ATT&CK mappings. Multi-tag events could contribute to multiple categories.",
+      "gridPos": {
+        "x": 12,
+        "y": 15,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "table",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events | [.Tag[]?.name | select(startswith(\"demo-theme:\"))] | unique | .[]] | group_by(.) | .[] | {theme: .[0], events: length}",
+          "columns": [
+            {
+              "selector": "theme",
+              "text": "theme",
+              "type": "string"
+            },
+            {
+              "selector": "events",
+              "text": "events",
+              "type": "number"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "always",
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Demo event workflow and MISP links",
+      "type": "table",
+      "description": "Click the id to open the event. Set the misp_url constant to your browser-accessible MISP base URL.",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_MISP}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_MISP}"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "jq-backend",
+          "format": "table",
+          "url": "/events/restSearch",
+          "root_selector": "def events:\n  (if type == \"array\" then .\n   elif (.response | type) == \"array\" then .response\n   else error(\"Expected MISP event array or response array\") end)\n  | .[] | (.Event // .);\ndef truth: . == true or . == 1 or . == \"1\";\ndef attrs: ((.Attribute // []) + [.Object[]?.Attribute[]?])\n  | unique_by(.uuid // .id // ([.type, .value] | join(\"|\"))) | .[];\n[events | {id: (.id | tostring), info, date, published: (if (.published | truth) then \"Published\" else \"Unpublished\" end), analysis: ({\"0\":\"Initial\", \"1\":\"Ongoing\", \"2\":\"Completed\"}[.analysis | tostring] // \"Unknown\"), modified: (.timestamp | tonumber)}] | sort_by(-.modified, .id) | .[]",
+          "columns": [
+            {
+              "selector": "id",
+              "text": "id",
+              "type": "string"
+            },
+            {
+              "selector": "info",
+              "text": "info",
+              "type": "string"
+            },
+            {
+              "selector": "date",
+              "text": "date",
+              "type": "string"
+            },
+            {
+              "selector": "published",
+              "text": "published",
+              "type": "string"
+            },
+            {
+              "selector": "analysis",
+              "text": "analysis",
+              "type": "string"
+            },
+            {
+              "selector": "modified",
+              "text": "modified",
+              "type": "timestamp_epoch_s"
+            }
+          ],
+          "url_options": {
+            "method": "POST",
+            "body_type": "raw",
+            "body_content_type": "application/json",
+            "data": "{\"returnFormat\": \"json\", \"tags\": \"livestream-demo\", \"limit\": 100, \"page\": 1, \"withAttachments\": false, \"metadata\": false, \"date\": [\"${__timeFrom:date:YYYY-MM-DD}\", \"${__timeTo:date:YYYY-MM-DD}\"]}",
+            "headers": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open event in MISP",
+                    "url": "${misp_url}/events/view/${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

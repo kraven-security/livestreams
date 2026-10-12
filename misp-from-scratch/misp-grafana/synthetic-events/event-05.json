@@ -1,0 +1,57 @@
+{
+  "Event": {
+    "uuid": "54e8f9e7-7edb-5590-9d41-6c3202b1aa28",
+    "info": "[GRAFANA DEMO] 05 Synthetic command-and-control",
+    "date": "2026-10-07",
+    "distribution": 0,
+    "threat_level_id": 2,
+    "analysis": 1,
+    "published": false,
+    "Attribute": [
+      {
+        "uuid": "6948c808-b030-528c-b768-7a37760f0027",
+        "type": "domain",
+        "category": "Network activity",
+        "value": "campaign-5.example",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "134bccd2-0d74-50a3-b4be-262b305afe9b",
+        "type": "ip-dst",
+        "category": "Network activity",
+        "value": "192.0.2.5",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "ba18f844-0ff5-5050-b76f-31208839c136",
+        "type": "url",
+        "category": "Network activity",
+        "value": "https://campaign-5.example/login",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "c38a7673-c650-5145-955c-7b6e6f5cfae8",
+        "type": "text",
+        "category": "Other",
+        "value": "SYNTHETIC TRAINING DATA - no real incident",
+        "to_ids": false,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      }
+    ],
+    "Tag": [
+      {
+        "name": "livestream-demo"
+      },
+      {
+        "name": "demo-theme:command-and-control"
+      }
+    ]
+  }
+}

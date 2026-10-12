@@ -1,0 +1,57 @@
+{
+  "Event": {
+    "uuid": "97b602dd-1b06-54ae-b6d2-03eaaa969ec3",
+    "info": "[GRAFANA DEMO] 03 Synthetic credential-theft",
+    "date": "2026-10-08",
+    "distribution": 0,
+    "threat_level_id": 2,
+    "analysis": 2,
+    "published": false,
+    "Attribute": [
+      {
+        "uuid": "f35e45e1-b55d-500a-935a-e5581d3de63e",
+        "type": "domain",
+        "category": "Network activity",
+        "value": "campaign-3.example",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "014e7fce-98df-5e84-9ffc-54b58c484859",
+        "type": "ip-dst",
+        "category": "Network activity",
+        "value": "192.0.2.3",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "42329854-c8cc-58e4-8998-93d7bef889c8",
+        "type": "url",
+        "category": "Network activity",
+        "value": "https://campaign-3.example/login",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "d945e130-3bde-5981-86ff-cd2a10401b90",
+        "type": "text",
+        "category": "Other",
+        "value": "SYNTHETIC TRAINING DATA - no real incident",
+        "to_ids": false,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      }
+    ],
+    "Tag": [
+      {
+        "name": "livestream-demo"
+      },
+      {
+        "name": "demo-theme:credential-theft"
+      }
+    ]
+  }
+}

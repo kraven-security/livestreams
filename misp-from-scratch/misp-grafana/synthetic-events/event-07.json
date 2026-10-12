@@ -1,0 +1,57 @@
+{
+  "Event": {
+    "uuid": "d29f8c0c-a634-530f-a3e4-369e0c0381a2",
+    "info": "[GRAFANA DEMO] 07 Synthetic phishing",
+    "date": "2026-10-05",
+    "distribution": 0,
+    "threat_level_id": 2,
+    "analysis": 0,
+    "published": false,
+    "Attribute": [
+      {
+        "uuid": "647e0157-077c-54a0-8522-993198867b27",
+        "type": "domain",
+        "category": "Network activity",
+        "value": "campaign-7.example",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "262b704a-ebe0-5aae-a0e4-640c8add4b09",
+        "type": "ip-dst",
+        "category": "Network activity",
+        "value": "192.0.2.7",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "ca640408-0928-5bbe-af3a-77da9fb19670",
+        "type": "url",
+        "category": "Network activity",
+        "value": "https://campaign-7.example/login",
+        "to_ids": true,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      },
+      {
+        "uuid": "20acae7f-7ede-5cb4-96ed-02b9d5e18415",
+        "type": "text",
+        "category": "Other",
+        "value": "SYNTHETIC TRAINING DATA - no real incident",
+        "to_ids": false,
+        "distribution": 5,
+        "comment": "Harmless livestream example"
+      }
+    ],
+    "Tag": [
+      {
+        "name": "livestream-demo"
+      },
+      {
+        "name": "demo-theme:phishing"
+      }
+    ]
+  }
+}

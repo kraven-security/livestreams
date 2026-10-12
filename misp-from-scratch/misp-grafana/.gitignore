@@ -1,0 +1,5 @@
+.secrets/
+__pycache__/
+demo-import-manifest.json
+demo-api-response.json
+demo-page2.json
