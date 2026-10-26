@@ -63,12 +63,18 @@ bash scripts/prepare_fleet.sh
 
 This builds the missing frontend with npm ci/buildproduction, checks index.html,
 applies the Fleet schema compatibility fix for Marshmallow 4 (`missing=None`
-becomes `load_default=None`), creates a private compose.part12.json with a
-loopback-only port and a random session secret, builds images, starts Redis,
-migrates the mounted database,
-prompts for a new admin password and starts backend/workers. Login at
-http://localhost:5001 on the Docker host using admin@admin.test and your chosen
-password. Keep the enrollment screen off-camera: its API-key field is visible.
+becomes `load_default=None`) and configures the frontend API, Socket.IO and
+image requests to use the browser's origin for remote access. It creates a
+private compose.part12.json with port 5001 published on all host interfaces and
+a random session secret and starts workers through the installed Huey module
+instead of the upstream virtualenv launcher. It builds images, starts Redis, migrates the mounted
+database, prompts for a new admin password and starts backend/workers. Login at
+http://<docker-host-ip>:5001 remotely (or http://localhost:5001 on the Docker
+host) using admin@admin.test and your chosen password. Keep the enrollment
+screen off-camera: its API-key field is visible.
+Preparation skips npm's automatic audit request so a stalled audit service does
+not block installation. Run `npm audit` separately from
+`repos/MISP-Fleet-Commander/web` to review frontend dependency vulnerabilities.
 The MISP URL must be reachable from containers; localhost refers to a container,
 not the host MISP. This full Docker path still requires rehearsal on your host.
 The frontend build was blocked in the review container by a restricted

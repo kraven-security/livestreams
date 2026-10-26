@@ -7,12 +7,28 @@ for program in npm docker; do
 done
 docker compose version
 repo=repos/MISP-Fleet-Commander
-(cd "$repo/web" && npm ci && npm run buildproduction)
-test -f "$repo/backend/application/dist/index.html"
 repos/misp-guard/.venv/bin/python - <<'PY'
 from pathlib import Path
 import json, os, secrets, yaml
 p=Path('repos/MISP-Fleet-Commander')
+# Use the browser's origin for API requests and Socket.IO, including remote access.
+frontend_patches = [
+    ('web/src/api/apiConfig.js', 'const baseurl = "http://127.0.0.1:5001"',
+     'const baseurl = window.location.origin'),
+    ('web/src/views/servers/elements/batchAddTableServer.vue',
+     '"http://127.0.0.1:5000/servers/batchTest"',
+     '`${window.location.origin}/servers/batchTest`'),
+    ('web/src/components/ui/elements/GrafanaRenderedGraph.vue',
+     '`http://127.0.0.1:5001/servers/monitoringImage/',
+     '`${window.location.origin}/servers/monitoringImage/'),
+]
+for relative, old, new in frontend_patches:
+    path=p/relative
+    source=path.read_text()
+    if old in source:
+        path.write_text(source.replace(old,new))
+    elif new not in source:
+        raise SystemExit(f'Fleet frontend changed upstream; review the remote-access patch: {relative}')
 # Upstream uses the pre-Marshmallow-4 name for a deserialization default.
 # Keep the equivalent behavior with current dependencies; safe on reruns.
 schema=p/'backend/application/marshmallowSchemas.py'
@@ -24,7 +40,12 @@ if old in source:
 elif new not in source:
     raise SystemExit('Fleet ServerSchema changed upstream; review the Marshmallow compatibility patch.')
 cfg=yaml.safe_load((p/'docker-compose.yml').read_text())
-cfg['services']['backend']['ports']=['127.0.0.1:5001:5001']
+cfg['services']['backend']['ports']=['5001:5001']
+# Docker installs packages globally; bypass the upstream venv-only launcher.
+cfg['services']['workers']['command']=[
+    'python', '-m', 'huey.bin.huey_consumer',
+    'application.workers.tasks.huey_app', '-w', '4', '-k', 'process',
+]
 secret=secrets.token_urlsafe(32)
 for name in ('backend','workers'):
     env=cfg['services'][name]['environment']
@@ -41,6 +62,11 @@ if out.exists():
 out.write_text(json.dumps(cfg,indent=2)+'\n')
 os.chmod(out,0o600)
 PY
+printf 'Installing Fleet frontend dependencies (run npm audit separately for a vulnerability report)...\n'
+(cd "$repo/web" && npm ci --no-audit --no-fund)
+printf 'Building Fleet frontend...\n'
+(cd "$repo/web" && npm run buildproduction)
+test -f "$repo/backend/application/dist/index.html"
 cd "$repo"
 docker compose -f compose.part12.json config --quiet
 docker compose -f compose.part12.json build
@@ -54,4 +80,4 @@ docker compose -f compose.part12.json run --rm backend flask user change_pw admi
 unset FLEET_DEMO_PASSWORD
 docker compose -f compose.part12.json up -d backend workers
 docker compose -f compose.part12.json ps
-printf 'Open http://localhost:5001 on the Docker host; log in with admin@admin.test and your chosen password.\n'
+printf 'Open http://<docker-host-ip>:5001 remotely (or http://localhost:5001 on the Docker host); log in with admin@admin.test and your chosen password.\n'

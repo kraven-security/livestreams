@@ -2,7 +2,7 @@
   "Event": {
     "uuid": "e27b7760-f545-5ae5-9a8d-52270a54b068",
     "info": "[GRAFANA DEMO] 02 Synthetic command-and-control",
-    "date": "2026-10-09",
+    "date": "2026-10-12",
     "distribution": 0,
     "threat_level_id": 2,
     "analysis": 1,
