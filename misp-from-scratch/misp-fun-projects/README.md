@@ -62,8 +62,10 @@ bash scripts/prepare_fleet.sh
 ```
 
 This builds the missing frontend with npm ci/buildproduction, checks index.html,
-creates a private compose.part12.json with a loopback-only port and a random
-session secret, builds images, starts Redis, migrates the mounted database,
+applies the Fleet schema compatibility fix for Marshmallow 4 (`missing=None`
+becomes `load_default=None`), creates a private compose.part12.json with a
+loopback-only port and a random session secret, builds images, starts Redis,
+migrates the mounted database,
 prompts for a new admin password and starts backend/workers. Login at
 http://localhost:5001 on the Docker host using admin@admin.test and your chosen
 password. Keep the enrollment screen off-camera: its API-key field is visible.
