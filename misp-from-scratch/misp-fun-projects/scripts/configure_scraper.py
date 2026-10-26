@@ -7,7 +7,7 @@ default = (repo / 'scraper.py.default').read_text()
 overrides = '''
 # Part12 overrides for a disposable lab. Not production defaults.
 import os, secrets
-misp_url = os.environ['MISP_URL']
+misp_url = os.environ['MISP_URL'].rstrip('/')
 misp_key = os.environ['MISP_API_KEY']
 misp_verifycert = True
 misp_distribution = 0

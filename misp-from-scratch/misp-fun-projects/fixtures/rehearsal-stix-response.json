@@ -1,0 +1,130 @@
+{
+  "conversion": {
+    "type": "bundle",
+    "id": "bundle--23c6d33b-8c55-4969-ba3a-1cb8d6ac4651",
+    "objects": [
+      {
+        "type": "identity",
+        "spec_version": "2.1",
+        "id": "identity--715b7f22-26f2-46a1-bb79-1c745533bdd7",
+        "created": "2026-10-21T17:33:39.765871Z",
+        "modified": "2026-10-21T17:33:39.765871Z",
+        "name": "Part12 Demo",
+        "identity_class": "organization"
+      },
+      {
+        "type": "grouping",
+        "spec_version": "2.1",
+        "id": "grouping--23c6d33b-8c55-4969-ba3a-1cb8d6ac4651",
+        "created_by_ref": "identity--715b7f22-26f2-46a1-bb79-1c745533bdd7",
+        "created": "2026-10-21T17:33:39.765871Z",
+        "modified": "2026-10-21T17:33:39.765871Z",
+        "name": "Part12 synthetic incident \u2014 conversion fixture",
+        "context": "suspicious-activity",
+        "object_refs": [
+          "observed-data--cd5b6098-098f-4b5a-8be7-07b2a51ee8bc",
+          "domain-name--cd5b6098-098f-4b5a-8be7-07b2a51ee8bc",
+          "observed-data--c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+          "network-traffic--c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+          "ipv4-addr--c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+          "observed-data--2baf4ac6-115e-471e-a299-63a385eb9df0",
+          "url--2baf4ac6-115e-471e-a299-63a385eb9df0"
+        ],
+        "labels": [
+          "Threat-Report",
+          "misp:tool=\"MISP-STIX-Converter\""
+        ]
+      },
+      {
+        "type": "observed-data",
+        "spec_version": "2.1",
+        "id": "observed-data--cd5b6098-098f-4b5a-8be7-07b2a51ee8bc",
+        "created_by_ref": "identity--715b7f22-26f2-46a1-bb79-1c745533bdd7",
+        "created": "2026-10-21T17:33:39.767287Z",
+        "modified": "2026-10-21T17:33:39.767287Z",
+        "first_observed": "2026-10-21T17:33:39.767287Z",
+        "last_observed": "2026-10-21T17:33:39.767287Z",
+        "number_observed": 1,
+        "object_refs": [
+          "domain-name--cd5b6098-098f-4b5a-8be7-07b2a51ee8bc"
+        ],
+        "labels": [
+          "misp:type=\"domain\"",
+          "misp:category=\"Network activity\""
+        ]
+      },
+      {
+        "type": "domain-name",
+        "spec_version": "2.1",
+        "id": "domain-name--cd5b6098-098f-4b5a-8be7-07b2a51ee8bc",
+        "value": "beacon.example"
+      },
+      {
+        "type": "observed-data",
+        "spec_version": "2.1",
+        "id": "observed-data--c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+        "created_by_ref": "identity--715b7f22-26f2-46a1-bb79-1c745533bdd7",
+        "created": "2026-10-21T17:33:39.768225Z",
+        "modified": "2026-10-21T17:33:39.768225Z",
+        "first_observed": "2026-10-21T17:33:39.768225Z",
+        "last_observed": "2026-10-21T17:33:39.768225Z",
+        "number_observed": 1,
+        "object_refs": [
+          "network-traffic--c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+          "ipv4-addr--c6c11307-d6cd-4816-86d0-22c7a4e68e77"
+        ],
+        "labels": [
+          "misp:type=\"ip-dst\"",
+          "misp:category=\"Network activity\""
+        ]
+      },
+      {
+        "type": "network-traffic",
+        "spec_version": "2.1",
+        "id": "network-traffic--c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+        "dst_ref": "ipv4-addr--c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+        "protocols": [
+          "tcp"
+        ]
+      },
+      {
+        "type": "ipv4-addr",
+        "spec_version": "2.1",
+        "id": "ipv4-addr--c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+        "value": "192.0.2.42"
+      },
+      {
+        "type": "observed-data",
+        "spec_version": "2.1",
+        "id": "observed-data--2baf4ac6-115e-471e-a299-63a385eb9df0",
+        "created_by_ref": "identity--715b7f22-26f2-46a1-bb79-1c745533bdd7",
+        "created": "2026-10-21T17:33:39.768686Z",
+        "modified": "2026-10-21T17:33:39.768686Z",
+        "first_observed": "2026-10-21T17:33:39.768686Z",
+        "last_observed": "2026-10-21T17:33:39.768686Z",
+        "number_observed": 1,
+        "object_refs": [
+          "url--2baf4ac6-115e-471e-a299-63a385eb9df0"
+        ],
+        "labels": [
+          "misp:type=\"url\"",
+          "misp:category=\"Network activity\""
+        ]
+      },
+      {
+        "type": "url",
+        "spec_version": "2.1",
+        "id": "url--2baf4ac6-115e-471e-a299-63a385eb9df0",
+        "value": "https://beacon.example/training"
+      }
+    ]
+  },
+  "diagnostics": {
+    "warnings": {},
+    "errors": {},
+    "counts": {
+      "warnings": 0,
+      "errors": 0
+    }
+  }
+}

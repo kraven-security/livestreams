@@ -1,0 +1,61 @@
+{
+  "conversion": {
+    "uuid": "23c6d33b-8c55-4969-ba3a-1cb8d6ac4651",
+    "Attribute": [
+      {
+        "uuid": "cd5b6098-098f-4b5a-8be7-07b2a51ee8bc",
+        "type": "domain",
+        "value": "beacon.example",
+        "category": "Network activity",
+        "to_ids": false,
+        "timestamp": "1792604019",
+        "disable_correlation": false
+      },
+      {
+        "uuid": "c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+        "type": "ip-dst",
+        "value": "192.0.2.42",
+        "category": "Network activity",
+        "to_ids": false,
+        "timestamp": "1792604019",
+        "disable_correlation": false
+      },
+      {
+        "uuid": "2baf4ac6-115e-471e-a299-63a385eb9df0",
+        "type": "url",
+        "value": "https://beacon.example/training",
+        "category": "Network activity",
+        "to_ids": false,
+        "timestamp": "1792604019",
+        "disable_correlation": false
+      }
+    ],
+    "Tag": [
+      {
+        "name": "misp-galaxy:producer=\"Part12 Demo\""
+      },
+      {
+        "name": "Threat-Report"
+      },
+      {
+        "name": "misp:tool=\"MISP-STIX-Converter\""
+      }
+    ],
+    "info": "Part12 synthetic incident \u2014 conversion fixture",
+    "distribution": "0",
+    "published": false,
+    "timestamp": "1792604019"
+  },
+  "diagnostics": {
+    "warnings": {
+      "bundle--23c6d33b-8c55-4969-ba3a-1cb8d6ac4651": [
+        "The Internal parser was selected from the document content itself. Use the `classification` parameter to make this choice explicit."
+      ]
+    },
+    "errors": {},
+    "counts": {
+      "warnings": 1,
+      "errors": 0
+    }
+  }
+}
