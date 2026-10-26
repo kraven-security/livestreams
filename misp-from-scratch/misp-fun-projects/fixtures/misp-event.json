@@ -1,0 +1,44 @@
+{
+  "Event": {
+    "uuid": "23c6d33b-8c55-4969-ba3a-1cb8d6ac4651",
+    "info": "Part12 synthetic incident \u2014 conversion fixture",
+    "date": "2026-10-21",
+    "distribution": "0",
+    "threat_level_id": "4",
+    "analysis": "0",
+    "published": false,
+    "Orgc": {
+      "uuid": "715b7f22-26f2-46a1-bb79-1c745533bdd7",
+      "name": "Part12 Demo"
+    },
+    "Attribute": [
+      {
+        "uuid": "cd5b6098-098f-4b5a-8be7-07b2a51ee8bc",
+        "type": "domain",
+        "category": "Network activity",
+        "value": "beacon.example",
+        "to_ids": false,
+        "distribution": "5",
+        "comment": "Synthetic training value, not observed malicious activity"
+      },
+      {
+        "uuid": "c6c11307-d6cd-4816-86d0-22c7a4e68e77",
+        "type": "ip-dst",
+        "category": "Network activity",
+        "value": "192.0.2.42",
+        "to_ids": false,
+        "distribution": "5",
+        "comment": "Synthetic training value, not observed malicious activity"
+      },
+      {
+        "uuid": "2baf4ac6-115e-471e-a299-63a385eb9df0",
+        "type": "url",
+        "category": "Network activity",
+        "value": "https://beacon.example/training",
+        "to_ids": false,
+        "distribution": "5",
+        "comment": "Synthetic training value, not observed malicious activity"
+      }
+    ]
+  }
+}
