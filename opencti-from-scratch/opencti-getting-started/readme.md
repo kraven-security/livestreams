@@ -1,6 +1,8 @@
 # OpenCTI From Scratch: Docker Setup + Free Threat Intel (AlienVault OTX)
 
-Lab kit for the Kraven Security livestream that deploys **OpenCTI Community Edition** with Docker, connects it to a free **AlienVault OTX** account for real community Pulses, and tours the UI: reports, indicators, observables, ATT&CK techniques and the knowledge graph. It ends with a comparison against MISP.
+Lab kit from the Kraven Security livestream that deploys **OpenCTI Community Edition** with Docker, connects it to a free **AlienVault OTX** account for real community Pulses, and tours the UI: reports, indicators, observables, ATT&CK techniques and the knowledge graph. It ends with a comparison against MISP.
+
+> **Interactive guide:** [OpenCTI From Scratch](https://claude.ai/artifact/JdzEqiS1jfqYtbDf1VhLvm) is the companion page used on the stream. It has the architecture explorer, copyable setup commands, a UI tour and troubleshooting.
 
 By the end you should be able to:
 
@@ -10,7 +12,7 @@ By the end you should be able to:
 - navigate the UI and follow STIX relationships between entities
 - decide when to use OpenCTI alongside MISP
 
-There's no custom application code. The stream runs the official OpenCTI Compose stack and adds one connector. Files in this folder:
+There's no custom application code. The lab runs the official OpenCTI Compose stack and adds one connector. Files in this folder:
 
 | File | Purpose |
 | --- | --- |
@@ -23,17 +25,53 @@ There's no custom application code. The stream runs the official OpenCTI Compose
 | [scripts/add_otx_settings.py](scripts/add_otx_settings.py) | Add the OTX API key, connector UUID and import cutoff to `.env` |
 | [compose/connector-alienvault.yml](compose/connector-alienvault.yml) | AlienVault OTX connector service (paste in, or use as an override) |
 
-> **Lab only.** Use a disposable Ubuntu VM. Never commit or share `.env`, and never show tokens, API keys or `docker compose config` output on screen.
+> **Lab only.** Use a disposable Ubuntu VM. Never commit or share `.env`, and never share tokens, API keys or `docker compose config` output (it prints secrets).
 
 ## Requirements
 
-- Ubuntu Linux host or VM (on macOS, a well-resourced Linux VM is the most predictable option)
+- Ubuntu Linux host or VM, local or in the cloud (on macOS, a Linux VM is the most predictable option)
+- At least 2 vCPU, 30 GB free disk and 16 GB RAM on a local machine (8 GB on a dedicated cloud VM). See [Sizing](#requirements)
 - Docker Engine with the Compose v2 plugin, Git, Python 3 and OpenSSL
 - Internet access for image pulls, MITRE data and OTX
 - Port 8080 free
 - A free [AlienVault OTX](https://otx.alienvault.com/) account
 
-**Sizing.** The official production docs list at least 8 GB RAM each for Elasticsearch and the OpenCTI core, plus dependencies. For a smooth all-in-one lab, aim for **24–32 GB RAM, 4–8 vCPU and at least 60 GB free SSD**. This is a lab suggestion, not a vendor minimum. Smaller hosts need tuning and can stall during setup.
+**Sizing.** This is a basic single-node lab, not a production deployment.
+
+| | Minimum | More comfortable |
+| --- | --- | --- |
+| RAM, local machine | **16 GB** | 24–32 GB |
+| RAM, dedicated cloud VM | **8 GB** | 16 GB |
+| vCPU | **2** | 4 |
+| Free disk (SSD) | **30 GB** | 60 GB |
+
+A local machine needs more RAM because your desktop, browser and other apps share it. A cloud VM runs only the lab.
+
+At the minimum spec, expect the first start and the first imports to be slow. On an 8 GB VM, set `ELASTIC_MEMORY_SIZE=2G` in `.env` (default `4G`) to leave room for the platform. For production sizing, see the [official docs](https://docs.opencti.io/latest/deployment/installation/).
+
+### No suitable machine? Run it in the cloud
+
+Any cloud Ubuntu VM with at least 2 vCPU and 8 GB RAM works. Examples:
+
+| Provider | 2 vCPU / 8 GB (minimum) | 2 vCPU / 16 GB (more comfortable) |
+| --- | --- | --- |
+| AWS EC2 | `m6i.large` or `t3.large` | `r6i.large` |
+| Azure | `Standard_D2s_v5` | `Standard_E2s_v5` |
+| Google Cloud | `e2-standard-2` | `e2-highmem-2` |
+| DigitalOcean | General Purpose, 2 vCPU / 8 GB | Memory-Optimized, 2 vCPU / 16 GB |
+
+Pick Ubuntu 22.04 or 24.04 LTS with a disk of at least 30 GB, install Docker, then follow the steps below.
+
+Keep a cloud lab private:
+
+- **Only open SSH (port 22), and only to your own IP.** Don't expose 8080, 9000 (MinIO) or 8090 (XTM One) to the internet.
+- **Reach the UI through an SSH tunnel.** Run this on your own machine, then open http://localhost:8080 in your browser:
+
+  ```bash
+  ssh -L 8080:localhost:8080 <user>@<vm-public-ip>
+  ```
+
+- **Stop or delete the VM when you're done.** A running instance costs money every hour. Stopping usually keeps the disk; deleting removes everything.
 
 ## Architecture
 
@@ -94,7 +132,7 @@ What the stack contains:
 - **Extras you can ignore:** `xtm-composer`, `xtm-one`, `xtm-one-worker`, `pgsql-xtm-one` and `rsa-key-generator`
 - **Data:** named volumes `esdata`, `s3data`, `redisdata` and `amqpdata` (plus `rsakeys` and `pgsqlxtmonedata`)
 
-Images use `:latest`. Pin them to a tested release before a live session, and don't upgrade blindly right before one.
+Images use `:latest`. Pin them to a tested release for anything you rely on, and don't upgrade blindly.
 
 ## 3. Generate secrets in `.env`
 
@@ -153,7 +191,7 @@ The script asks for the key without echoing it, creates a stable UUIDv4 connecto
 
 **6.4 Add the connector service.** Either:
 
-- **Paste it:** copy the `connector-alienvault:` block from [compose/connector-alienvault.yml](compose/connector-alienvault.yml) into `docker-compose.yml` under top-level `services:`, next to `connector-mitre` and `connector-opencti`, with two-space indentation. This is the version shown on stream.
+- **Paste it:** copy the `connector-alienvault:` block from [compose/connector-alienvault.yml](compose/connector-alienvault.yml) into `docker-compose.yml` under top-level `services:`, next to `connector-mitre` and `connector-opencti`, with two-space indentation.
 - **Or use it as an override:** add `-f docker-compose.yml -f compose/connector-alienvault.yml` to each `docker compose` command below.
 
 Key settings:
@@ -239,7 +277,7 @@ This lab covers Community Edition only. Enterprise and AI features aren't includ
 | Connector absent or not importing | Deployed status, connector logs, outbound network; give the import time |
 | Token invalid | `OPENCTI_ADMIN_TOKEN` must be a UUIDv4 |
 | Port 8080 taken | Free the port, or change the Compose port and base URL together |
-| Low memory | Stop other services or use a larger host; only use a Compose override you've tested |
+| Low memory | Below the minimum (16 GB local, 8 GB cloud) the stack struggles. On 8 GB, set `ELASTIC_MEMORY_SIZE=2G`. Stop other services, move to a larger host or a [cloud VM](#no-suitable-machine-run-it-in-the-cloud), or only use a Compose override you've tested |
 | Unexpected XTM One containers | These are normal in the current upstream default |
 
 ## Cleanup
@@ -256,6 +294,7 @@ docker compose down        # stops the stack, keeps data in named volumes
 
 ## References
 
+- [Interactive guide (companion page)](https://claude.ai/artifact/JdzEqiS1jfqYtbDf1VhLvm)
 - [OpenCTI installation](https://docs.opencti.io/latest/deployment/installation/) · [Platform overview](https://docs.opencti.io/latest/deployment/overview/) · [Connectors](https://docs.opencti.io/latest/deployment/connectors/)
 - [OpenCTI Docker repo](https://github.com/OpenCTI-Platform/docker) · [.env.sample](https://github.com/OpenCTI-Platform/docker/blob/master/.env.sample)
 - [Getting started / UI](https://docs.opencti.io/latest/usage/getting-started/) · [UI overview](https://docs.opencti.io/latest/usage/overview/) · [Graphs](https://docs.opencti.io/latest/usage/graphs/) · [Automated imports](https://docs.opencti.io/latest/usage/import/getting-started/) · [Data sharing](https://docs.opencti.io/latest/deployment/integrations/)

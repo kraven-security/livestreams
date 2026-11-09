@@ -1,6 +1,6 @@
 # AlienVault OTX external-import connector for the upstream OpenCTI stack.
 #
-# Option A (as shown on stream): copy the `connector-alienvault:` block into
+# Option A: copy the `connector-alienvault:` block into
 # the upstream docker-compose.yml under top-level `services:`, alongside
 # connector-mitre and connector-opencti. Keep two spaces of indentation.
 #
@@ -8,7 +8,7 @@
 #   docker compose -f docker-compose.yml -f compose/connector-alienvault.yml up -d connector-alienvault
 #
 # Secrets come from .env (see scripts/add_otx_settings.py). Never put them here.
-# Pin an image tag that matches your OpenCTI platform release before going live;
+# Pin an image tag that matches your OpenCTI platform release;
 # :latest is the upstream example default.
 services:
   connector-alienvault:

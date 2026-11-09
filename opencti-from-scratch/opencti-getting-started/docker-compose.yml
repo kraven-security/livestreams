@@ -5,7 +5,7 @@
 #
 # Values come from .env (copy .env.sample, then run scripts/generate_env_secrets.py).
 # XTM One / xtm-composer services are part of the upstream default; this lab does not use them.
-# Pin image tags to a tested OpenCTI release before going live instead of :latest.
+# Pin image tags to a tested OpenCTI release instead of :latest for anything you rely on.
 
 services:
 
