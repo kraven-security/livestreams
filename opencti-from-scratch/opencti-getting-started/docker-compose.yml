@@ -51,10 +51,9 @@ services:
       - logger.org.elasticsearch.discovery="ERROR"
       - "ES_JAVA_OPTS=-Xms${ELASTIC_MEMORY_SIZE} -Xmx${ELASTIC_MEMORY_SIZE}"
     restart: always
+    # memlock ulimit removed: bootstrap.memory_lock isn't enabled, and unlimited
+    # memlock fails on unprivileged LXC / rootless Docker hosts.
     ulimits:
-      memlock:
-        soft: -1
-        hard: -1
       nofile:
         soft: 65536
         hard: 65536
